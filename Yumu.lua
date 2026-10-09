@@ -2192,6 +2192,8 @@ local SoundLibrary = {
     ["minecraft success bow hit"]   = "rbxassetid://131197435969853",
     ["sparkle"]                     = "rbxassetid://110241936966089",
     ["rust hs"]                     = "rbxassetid://4764109000",
+    ["windows 10 error"]            = "rbxassetid://5914602124",
+
 }
 
 local SoundKeys = {}
