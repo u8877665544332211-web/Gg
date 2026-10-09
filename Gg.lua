@@ -302,8 +302,150 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- Combat 탭 UI 구성
+-- Combat 탭 UI 구성 (최상단 반영)
 -- ==========================================
+
+-- 1. Aimbot 그룹박스 (Combat 탭 좌측 최상단)
+local AimbotGroup = Tabs.Combat:AddLeftGroupbox('Aimbot')
+
+AimbotGroup:AddToggle('AimbotEnable', {
+    Text = 'Enable Aimbot',
+    Default = false,
+    Callback = function(Value)
+        getgenv().elisium = getgenv().elisium or {}
+        getgenv().elisium.aimbot = getgenv().elisium.aimbot or {}
+        getgenv().elisium.aimbot.enable = Value
+    end
+})
+
+AimbotGroup:AddToggle('AimbotShowFOV', {
+    Text = 'Show FOV',
+    Default = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.aimbot then
+            getgenv().elisium.aimbot.show_fov = Value
+        end
+    end
+}):AddColorPicker('AimbotFOVColor', {
+    Default = Color3.fromRGB(120, 81, 166),
+    Title = 'FOV Color',
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.aimbot then
+            getgenv().elisium.aimbot.fov_color = Value
+        end
+    end
+})
+
+AimbotGroup:AddSlider('AimbotFOVRadius', {
+    Text = 'FOV Radius',
+    Default = 180,
+    Min = 10,
+    Max = 800,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.aimbot then
+            getgenv().elisium.aimbot.fov_radius = Value
+        end
+    end
+})
+
+AimbotGroup:AddSlider('AimbotSmoothing', {
+    Text = 'Smoothing',
+    Default = 1,
+    Min = 1,
+    Max = 20,
+    Rounding = 1,
+    Compact = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.aimbot then
+            getgenv().elisium.aimbot.smoothing = Value
+        end
+    end
+})
+
+AimbotGroup:AddToggle('AimbotClosestPart', {
+    Text = 'Target Closest Part',
+    Default = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.aimbot then
+            getgenv().elisium.aimbot.closest_part = Value
+        end
+    end
+})
+
+
+-- 2. Silent Aim 그룹박스 (Combat 탭 우측 최상단)
+local SilentAimGroup = Tabs.Combat:AddRightGroupbox('Silent Aim')
+
+SilentAimGroup:AddToggle('SilentAimEnable', {
+    Text = 'Enable Silent Aim',
+    Default = false,
+    Callback = function(Value)
+        getgenv().elisium = getgenv().elisium or {}
+        getgenv().elisium.silent_aim = getgenv().elisium.silent_aim or {}
+        getgenv().elisium.silent_aim.enable = Value
+    end
+})
+
+SilentAimGroup:AddToggle('SilentAimShowFOV', {
+    Text = 'Show FOV',
+    Default = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.silent_aim then
+            getgenv().elisium.silent_aim.show_fov = Value
+        end
+    end
+}):AddColorPicker('SilentAimFOVColor', {
+    Default = Color3.fromRGB(120, 81, 166),
+    Title = 'FOV Color',
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.silent_aim then
+            getgenv().elisium.silent_aim.fov_color = Value
+        end
+    end
+})
+
+SilentAimGroup:AddSlider('SilentAimFOVRadius', {
+    Text = 'FOV Radius',
+    Default = 180,
+    Min = 10,
+    Max = 800,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.silent_aim then
+            getgenv().elisium.silent_aim.fov_radius = Value
+        end
+    end
+})
+
+SilentAimGroup:AddSlider('SilentAimHitChance', {
+    Text = 'Hit Chance',
+    Default = 100,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.silent_aim then
+            getgenv().elisium.silent_aim.hit_chance = Value
+        end
+    end
+})
+
+SilentAimGroup:AddToggle('SilentAimClosestPart', {
+    Text = 'Target Closest Part',
+    Default = false,
+    Callback = function(Value)
+        if getgenv().elisium and getgenv().elisium.silent_aim then
+            getgenv().elisium.silent_aim.closest_part = Value
+        end
+    end
+})
+
+
+-- 3. Ragebot 그룹박스 (Combat 탭 기존 항목)
 local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot')
 
 RagebotGroup:AddToggle('RagebotEnabled', {
