@@ -7,7 +7,7 @@ local Toggles = getgenv().Toggles or Library.Toggles
 local Options = getgenv().Options or Library.Options
 
 -- ==========================================
--- Services & Local Player 설정 (중복 제거)
+-- Services & Local Player 설정
 -- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -189,7 +189,7 @@ task.spawn(function()
                 local _0Ol00I01OO0l = L405_52.Position + Vector3.new(0, 0.1, 0)
                 local v84604 = teleport_character(_0Ol00I01OO0l, L405_52)
                 pcall(function()
-                    if _0xf72a and _IIOl1OI11O00 then -- nil 인자 검증 안전장치
+                    if _0xf72a and _IIOl1OI11O00 then
                         __MAwXiJM:FireServer(_0xf72a, _IIOl1OI11O00, v84604, nil)
                     end
                 end)
@@ -355,7 +355,7 @@ RagebotGroup:AddSlider('RagebotAttack', {
 })
 
 -- ==========================================
--- Visuals 탭 (ESP & Skybox)
+-- Visuals 탭 (ESP, Skybox & Indicators)
 -- ==========================================
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox('ESP')
 
@@ -366,6 +366,28 @@ ESPGroup:AddToggle('ESPDistance', { Text = 'Distance ESP', Default = false })
 ESPGroup:AddToggle('ESPTracer', { Text = 'Tracer ESP', Default = false })
 ESPGroup:AddToggle('ESPSkeleton', { Text = 'Skeleton ESP', Default = false })
 ESPGroup:AddToggle('ESPChams', { Text = 'Chams ESP', Default = false })
+
+-- Indicators 전용 변수
+local _3323x151 = false -- Ragebot Indicator 활성화 여부
+local a41b78c88 = false -- Ammo Indicator 활성화 여부
+
+local IndicatorGroup = Tabs.Visuals:AddLeftGroupbox('Indicators')
+
+IndicatorGroup:AddToggle('IndicatorRagebot', {
+    Text = 'Ragebot Indicator',
+    Default = false,
+    Callback = function(Value)
+        _3323x151 = Value
+    end
+})
+
+IndicatorGroup:AddToggle('IndicatorAmmo', {
+    Text = 'Ammo Indicator',
+    Default = false,
+    Callback = function(Value)
+        a41b78c88 = Value
+    end
+})
 
 local SkyboxGroup = Tabs.Visuals:AddRightGroupbox('Skybox')
 
@@ -403,6 +425,152 @@ SkyboxGroup:AddDropdown('SkyboxPresetDropdown', {
         if Value == 'Disable' then RemoveSky() elseif Presets[Value] then ApplySky(Presets[Value]) end
     end
 })
+
+-- ==========================================
+-- Screen GUI Indicators 생성 (화면 중앙 표시)
+-- ==========================================
+local _9376x428 = Instance.new("ScreenGui")
+_9376x428.Name = "HalmuIndicators"
+_9376x428.ResetOnSpawn = false
+_9376x428.IgnoreGuiInset = true
+_9376x428.DisplayOrder = 999
+_9376x428.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+pcall(function()
+    _9376x428.Parent = game:GetService("CoreGui")
+end)
+if not _9376x428.Parent then
+    _9376x428.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local _993_318 = Instance.new("TextLabel")
+_993_318.Name = "RagebotIndicator"
+_993_318.BackgroundTransparency = 1
+_993_318.Size = UDim2.new(0, 420, 0, 22)
+_993_318.AnchorPoint = Vector2.new(0.5, 0)
+_993_318.Position = UDim2.new(0.5, 0, 0.5, 36)
+_993_318.Font = Enum.Font.Code
+_993_318.TextSize = 14
+_993_318.TextColor3 = Color3.fromRGB(245, 245, 245)
+_993_318.TextStrokeTransparency = 0
+_993_318.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+_993_318.Text = ""
+_993_318.Visible = false
+_993_318.Parent = _9376x428
+
+local _0011Il00 = Instance.new("TextLabel")
+_0011Il00.Name = "AmmoIndicator"
+_0011Il00.BackgroundTransparency = 1
+_0011Il00.Size = UDim2.new(0, 420, 0, 18)
+_0011Il00.AnchorPoint = Vector2.new(0.5, 0)
+_0011Il00.Position = UDim2.new(0.5, 0, 0.5, 52)
+_0011Il00.Font = Enum.Font.Code
+_0011Il00.TextSize = 11
+_0011Il00.TextColor3 = Color3.fromRGB(245, 245, 245)
+_0011Il00.TextStrokeTransparency = 0
+_0011Il00.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+_0011Il00.Text = ""
+_0011Il00.Visible = false
+_0011Il00.Parent = _9376x428
+
+local function get_local_ammo_status()
+    local v43335, _0xfd96, L505_10 = nil, nil, false
+    pcall(function()
+        local _3213x326 = LocalPlayer.PlayerScripts
+        local _0x9ec3, _0lO010OIIO = pcall(require, _3213x326.Controllers.FighterController)
+        if not _0x9ec3 or not _0lO010OIIO then return end
+        local _0x3584 = _0lO010OIIO.LocalFighter
+        if not _0x3584 then return end
+        local _549_282 = _0x3584.EquippedItem
+        if not _549_282 then return end
+
+        local function get_property(key)
+            local L704_40, L619_44 = pcall(function()
+                if _549_282.Get then return _549_282:Get(key) end
+                return _549_282[key] or (_549_282.Data and _549_282.Data[key]) or (_549_282.Info and _549_282.Info[key])
+            end)
+            if L704_40 then return L619_44 end
+            return nil
+        end
+
+        v43335 = get_property("CurrentAmmo") or get_property("Ammo") or get_property("Bullets") or get_property("MagazineAmmo")
+        _0xfd96 = get_property("ReserveAmmo") or get_property("StoredAmmo") or get_property("Reserve") or get_property("TotalAmmo") or get_property("MaxAmmo") or get_property("MaxBullets")
+        local L616_26 = get_property("Reloading") or get_property("IsReloading") or get_property("Reload")
+        L505_10 = L616_26 == true
+
+        if _549_282.Info and type(_549_282.Info) == "table" then
+            if v43335 == nil then v43335 = _549_282.Info.CurrentAmmo or _549_282.Info.Ammo end
+            if _0xfd96 == nil then _0xfd96 = _549_282.Info.ReserveAmmo or _549_282.Info.StoredAmmo or _549_282.Info.MaxAmmo end
+            if _549_282.Info.Reloading == true or _549_282.Info.IsReloading == true then
+                L505_10 = true
+            end
+        end
+    end)
+    return v43335, _0xfd96, L505_10
+end
+
+-- RenderStepped 루프 내 Indicator Text 갱신
+RunService.RenderStepped:Connect(function()
+    if _3323x151 and L555_61 then
+        local _00IO01 = "idk"
+        if a73b35c96 and a73b35c96.Parent then
+            local _0xb7aa = a73b35c96:FindFirstAncestorOfClass("Model") or a73b35c96.Parent
+            local __bdUacYjXOqr = Players:GetPlayerFromCharacter(_0xb7aa)
+            if __bdUacYjXOqr then
+                _00IO01 = __bdUacYjXOqr.DisplayName or __bdUacYjXOqr.Name
+            elseif typeof(_0xb7aa) == "Instance" then
+                _00IO01 = _0xb7aa.Name
+            end
+        end
+        _993_318.Text = "ragebot : " .. tostring(_00IO01) .. "..."
+        _993_318.Position = UDim2.new(0.5, 0, 0.5, 36)
+        _993_318.Visible = true
+    else
+        _993_318.Visible = false
+    end
+
+    if a41b78c88 then
+        local v43335, _0xfd96, L505_10 = get_local_ammo_status()
+        local __UGHeELfMSX
+        if L505_10 or (typeof(v43335) == "number" and v43335 <= 0 and (_0xfd96 == nil or (typeof(_0xfd96) == "number" and _0xfd96 >= 0))) then
+            if L505_10 then
+                __UGHeELfMSX = "reloading"
+            elseif typeof(v43335) == "number" and typeof(_0xfd96) == "number" then
+                __UGHeELfMSX = string.format("%d/%d", _0xfd96, v43335)
+            else
+                __UGHeELfMSX = "reloading"
+            end
+        end
+        
+        if not __UGHeELfMSX then
+            if typeof(v43335) == "number" and typeof(_0xfd96) == "number" then
+                __UGHeELfMSX = string.format("%d/%d", _0xfd96, v43335)
+            elseif typeof(v43335) == "number" then
+                __UGHeELfMSX = tostring(v43335)
+            else
+                __UGHeELfMSX = nil
+            end
+        end
+
+        if L505_10 then
+            __UGHeELfMSX = "reloading"
+        end
+
+        if __UGHeELfMSX then
+            _0011Il00.Text = __UGHeELfMSX
+            local v75310 = 52
+            if _3323x151 and L555_61 then
+                v75310 = 52
+            end
+            _0011Il00.Position = UDim2.new(0.5, 0, 0.5, v75310)
+            _0011Il00.Visible = true
+        else
+            _0011Il00.Visible = false
+        end
+    else
+        _0011Il00.Visible = false
+    end
+end)
 
 -- ==========================================
 -- Character 탭 (Emote)
@@ -552,7 +720,6 @@ SkinBox:AddButton('Unlock All', function()
 
             Library:Notify("Loading Skin Changer...", 2)
 
-            -- loadstring 대신 직접 함수 스코프로 실행하여 안정성 확보
             local playerScripts = LocalPlayer:WaitForChild("PlayerScripts")
             local controllers = playerScripts:WaitForChild("Controllers")
 
@@ -751,7 +918,6 @@ local function IsToggleActive(toggleName)
     return Toggles and Toggles[toggleName] and Toggles[toggleName].Value == true
 end
 
--- Chams 업데이트 전용 최적화 처리
 local function UpdateChams(c, enable)
     if not c then return end
     local highlight = c:FindFirstChild("AntiHubChams")
@@ -861,7 +1027,6 @@ SettingsMenu:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', {
 
 Library.ToggleKeybind = Options.MenuKeybind
 
--- LinoriaLib 내장 설정 관리자 및 테마 설정 적용
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
@@ -874,5 +1039,4 @@ SaveManager:SetFolder('YumuEnchantment/configs')
 SaveManager:BuildConfigSection(Tabs.Setting)
 ThemeManager:ApplyToTab(Tabs.Setting)
 
--- 콘픽 자동 불러오기 처리
 SaveManager:LoadAutoloadConfig()
