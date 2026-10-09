@@ -18,7 +18,7 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ==========================================
--- Extended Visuals 모듈 및 Config 안전장치 (폴백)
+-- Extended Visuals 모듈 및 Config 폴백 정의
 -- ==========================================
 getgenv().Config = getgenv().Config or {}
 local Config = getgenv().Config
@@ -446,8 +446,8 @@ ESPGroup:AddToggle('ESPSkeleton', { Text = 'Skeleton ESP', Default = false })
 ESPGroup:AddToggle('ESPChams', { Text = 'Chams ESP', Default = false })
 
 -- Indicators 전용 변수
-local _3323x151 = false
-local a41b78c88 = false
+local _3323x151 = false -- Ragebot Indicator 활성화 여부
+local a41b78c88 = false -- Ammo Indicator 활성화 여부
 
 local IndicatorGroup = Tabs.Visuals:AddLeftGroupbox('Indicators')
 
@@ -504,7 +504,9 @@ SkyboxGroup:AddDropdown('SkyboxPresetDropdown', {
     end
 })
 
--- [[ Extended Visuals Section (Lighting, Weather, Viewmodel, Holograms, Cosmetics, Spoofer) ]]
+-- ==========================================
+-- 통합된 Visuals 확장 기능 섹션
+-- ==========================================
 do (function()
     local LTB = Tabs.Visuals:AddLeftTabbox('World')
     local WL = LTB:AddTab('Lighting')
