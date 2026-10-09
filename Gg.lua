@@ -300,7 +300,7 @@ end)
 -- ==========================================
 -- Combat 탭 UI 구성 (LinoriaLib)
 -- ==========================================
-local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot')
+local RagebotGroup = Tabs.Combot:AddLeftGroupbox('Ragebot')
 
 RagebotGroup:AddToggle('RagebotEnabled', {
     Text = 'Enabled',
