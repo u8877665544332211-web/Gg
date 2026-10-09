@@ -17,6 +17,84 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- ==========================================
+-- Extended Visuals 모듈 및 Config 안전장치 (폴백)
+-- ==========================================
+getgenv().Config = getgenv().Config or {}
+local Config = getgenv().Config
+
+getgenv().Visuals = getgenv().Visuals or {
+    enable = function() end,
+    disable = function() end,
+    setPreset = function() end,
+    setGrade = function() end,
+    setGradeStrength = function() end,
+    setBloom = function() end,
+    setBloomIntensity = function() end,
+    toggleFullbright = function() end,
+    toggleNoFog = function() end,
+    toggleRainbow = function() end,
+    togglePerf = function() end,
+    refreshViewModel = function() end,
+    applyGuiNameSpoof = function() end,
+    updatePlayerSpoofer = function() end,
+    PresetOrder = {'Neutral','Day','Night','Cyber','Sunset','Winter','Vaporwave'}
+}
+local Visuals = getgenv().Visuals
+
+getgenv().Weather = getgenv().Weather or {
+    enableWeather = function() end,
+    disableWeather = function() end,
+    setType = function() end,
+    setIntensity = function() end,
+    setVolume = function() end,
+    toggleMood = function() end,
+    toggleStorm = function() end,
+    toggleSkyFlash = function() end,
+    toggleMeteors = function() end,
+    setMeteorsRate = function() end,
+    toggleShootingStars = function() end,
+    setStarsRate = function() end,
+    setSkybox = function() end,
+    toggleCelestial = function() end,
+    toggleGodRays = function() end,
+    toggleRainbow = function() end,
+    togglePuddles = function() end,
+    toggleClock = function() end,
+    SkyboxOrder = {'Off','Space','Sunset','Clouds','Storm','Winter','Vaporwave'}
+}
+local Weather = getgenv().Weather
+
+getgenv().GameVisuals = getgenv().GameVisuals or {
+    enable = function() end,
+    disable = function() end,
+    setUnlockAll = function() end,
+    saveConfig = function() end,
+    syncEmotes = function() end,
+    playEmote = function() end,
+    restore = function() end,
+    refreshRankCharmMeta = function() end,
+    applyRankedCharm = function() end,
+    setWeapon = function() end,
+    setSkin = function() end,
+    setCharm = function() end,
+    setWrap = function() end,
+    setFinisher = function() end,
+    setWrapInverted = function() end,
+    weaponList = function() return {} end,
+    skinList = function() return {} end,
+    charmList = function() return {} end,
+    wrapList = function() return {} end,
+    finisherList = function() return {} end,
+    rankNames = function() return {} end,
+    emoteList = function() return {} end,
+    rankedCharmsFor = function() return {} end,
+    uiAlive = true,
+    summary = function() return {} end,
+    ready = function() return false end
+}
+local GameVisuals = getgenv().GameVisuals
+
 local Window = Library:CreateWindow({
     Title = 'Yumu Enchantment - discord.gg/qTV5c5Fn6',
     Center = true,
@@ -355,7 +433,7 @@ RagebotGroup:AddSlider('RagebotAttack', {
 })
 
 -- ==========================================
--- Visuals 탭 (ESP, Skybox & Indicators)
+-- Visuals 탭 (ESP, Skybox, Indicators & Extended Visuals)
 -- ==========================================
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox('ESP')
 
@@ -368,8 +446,8 @@ ESPGroup:AddToggle('ESPSkeleton', { Text = 'Skeleton ESP', Default = false })
 ESPGroup:AddToggle('ESPChams', { Text = 'Chams ESP', Default = false })
 
 -- Indicators 전용 변수
-local _3323x151 = false -- Ragebot Indicator 활성화 여부
-local a41b78c88 = false -- Ammo Indicator 활성화 여부
+local _3323x151 = false
+local a41b78c88 = false
 
 local IndicatorGroup = Tabs.Visuals:AddLeftGroupbox('Indicators')
 
@@ -425,6 +503,329 @@ SkyboxGroup:AddDropdown('SkyboxPresetDropdown', {
         if Value == 'Disable' then RemoveSky() elseif Presets[Value] then ApplySky(Presets[Value]) end
     end
 })
+
+-- [[ Extended Visuals Section (Lighting, Weather, Viewmodel, Holograms, Cosmetics, Spoofer) ]]
+do (function()
+    local LTB = Tabs.Visuals:AddLeftTabbox('World')
+    local WL = LTB:AddTab('Lighting')
+    local WX = LTB:AddTab('Weather')
+    WL:AddToggle('Visuals', { Text='Enable', Default=(Config.Visuals or false),
+        Callback=function(v) if v then Visuals.enable() else Visuals.disable() end end })
+        :AddKeyPicker('VisualsToggleKey', { Default='None', Mode='Toggle', SyncToggleState=true, Text='Visuals' })
+    local litDep = WL:AddDependencyBox()
+    litDep:AddDropdown('VisualsPreset', { Values=Visuals.PresetOrder or {'Neutral','Day','Night','Cyber','Sunset','Winter','Vaporwave'},
+        Default=(Config.VisualsPreset or 'Neutral'), Text='Preset',
+        Callback=function(v) Visuals.setPreset(v) end })
+    litDep:AddDropdown('VisualsGrade', { Values={'None','Crisp','Cold','Warm','Comp'},
+        Default=(Config.VisualsGrade or 'Crisp'), Text='Color grade',
+        Callback=function(v) if Visuals.setGrade then Visuals.setGrade(v) else Config.VisualsGrade = v end end })
+    litDep:AddSlider('VisualsGradeStrength', { Text='Grade strength', Default=(Config.VisualsGradeStrength or 0.6),
+        Min=0, Max=1, Rounding=2, Suffix='x',
+        Callback=function(v) if Visuals.setGradeStrength then Visuals.setGradeStrength(v) else Config.VisualsGradeStrength = v end end })
+    litDep:AddToggle('VisualsBloom', { Text='Bloom', Default=(Config.VisualsBloom or false),
+        Callback=function(v) Visuals.setBloom(v) end })
+    local blmDep = litDep:AddDependencyBox()
+    blmDep:AddSlider('VisualsBloomIntensity', { Text='Bloom intensity', Default=(Config.VisualsBloomIntensity or 1.0),
+        Min=0, Max=3, Rounding=2, Suffix='x',
+        Callback=function(v) if Visuals.setBloomIntensity then Visuals.setBloomIntensity(v) else Config.VisualsBloomIntensity = v end end })
+    blmDep:SetupDependencies({ { Toggles.VisualsBloom, true } })
+    litDep:AddDivider('World')
+    litDep:AddToggle('VisualsFullbright', { Text='Fullbright', Default=(Config.VisualsFullbright or false),
+        Callback=function(v) Visuals.toggleFullbright(v) end })
+    litDep:AddToggle('VisualsNoFog', { Text='No fog', Default=(Config.VisualsNoFog or false),
+        Callback=function(v) Visuals.toggleNoFog(v) end })
+    litDep:AddToggle('VisualsRainbowMap', { Text='Rainbow world', Default=(Config.VisualsRainbowMap or false),
+        Callback=function(v) if Visuals.toggleRainbow then Visuals.toggleRainbow(v) else Config.VisualsRainbowMap = v end end })
+    litDep:AddToggle('VisualsPerformanceMode', { Text='Performance mode', Default=(Config.VisualsPerformanceMode or false),
+        Callback=function(v) Visuals.togglePerf(v) end })
+    litDep:SetupDependencies({ { Toggles.Visuals, true } })
+    WX:AddToggle('Weather', { Text='Enable', Default=(Config.Weather or false),
+        Callback=function(v) if v then Weather.enableWeather() else Weather.disableWeather() end end })
+    local wxDep = WX:AddDependencyBox()
+    wxDep:AddDropdown('WeatherType', { Values={'Rain','Snow','Petals','Autumn','Mist','Ash','Sandstorm','Embers','Fireflies'},
+        Default=(Config.WeatherType or 'Rain'), Text='Precipitation',
+        Callback=function(v) Weather.setType(v) end })
+    wxDep:AddSlider('WeatherIntensity', { Text='Intensity', Default=(Config.WeatherIntensity or 1.0),
+        Min=0.15, Max=2, Rounding=2, Suffix='x',
+        Callback=function(v) Weather.setIntensity(v) end })
+    wxDep:AddSlider('WeatherSoundVolume', { Text='Volume', Default=(Config.WeatherSoundVolume or 0.35),
+        Min=0, Max=1, Rounding=2,
+        Callback=function(v) Weather.setVolume(v) end })
+    wxDep:AddToggle('WeatherMood', { Text='Mood tint', Default=(Config.WeatherMood or true),
+        Callback=function(v) Weather.toggleMood(v) end })
+    wxDep:AddDivider('Atmosphere')
+    wxDep:AddToggle('WeatherStorm', { Text='Storm & lightning', Default=(Config.WeatherStorm or false),
+        Callback=function(v) Weather.toggleStorm(v) end })
+    local stormDep = wxDep:AddDependencyBox()
+    stormDep:AddToggle('WeatherStormFlash', { Text='Sky flash', Default=(Config.WeatherStormFlash or true),
+        Callback=function(v) Weather.toggleSkyFlash(v) end })
+    stormDep:SetupDependencies({ { Toggles.WeatherStorm, true } })
+    wxDep:AddToggle('WeatherMeteors', { Text='Meteors', Default=(Config.WeatherMeteors or false),
+        Callback=function(v) Weather.toggleMeteors(v) end })
+    local metDep = wxDep:AddDependencyBox()
+    metDep:AddSlider('WeatherMeteorRate', { Text='Rate', Default=(Config.WeatherMeteorRate or 1.0),
+        Min=0.25, Max=3, Rounding=2, Suffix='x', Compact=true,
+        Callback=function(v) Weather.setMeteorsRate(v) end })
+    metDep:SetupDependencies({ { Toggles.WeatherMeteors, true } })
+    wxDep:AddToggle('WeatherShootingStars', { Text='Shooting stars', Default=(Config.WeatherShootingStars or false),
+        Callback=function(v) Weather.toggleShootingStars(v) end })
+    local starDep = wxDep:AddDependencyBox()
+    starDep:AddSlider('WeatherStarRate', { Text='Rate', Default=(Config.WeatherStarRate or 1.0),
+        Min=0.25, Max=3, Rounding=2, Suffix='x', Compact=true,
+        Callback=function(v) Weather.setStarsRate(v) end })
+    starDep:SetupDependencies({ { Toggles.WeatherShootingStars, true } })
+    wxDep:AddDropdown('SkyboxPreset', { Values=Weather.SkyboxOrder or {'Off','Space','Sunset','Clouds','Storm','Winter','Vaporwave'},
+        Default=(Config.SkyboxPreset or 'Off'), Text='Skybox',
+        Callback=function(v) Weather.setSkybox(v) end })
+    wxDep:AddToggle('SkyboxHideCelestial', { Text='Hide celestial', Default=(Config.SkyboxHideCelestial or false),
+        Callback=function(v) Weather.toggleCelestial(v) end })
+    wxDep:AddToggle('WeatherGodRays', { Text='God rays', Default=(Config.WeatherGodRays or false),
+        Callback=function(v) Weather.toggleGodRays(v) end })
+    wxDep:AddToggle('WeatherRainbow', { Text='Rainbow', Default=(Config.WeatherRainbow or false),
+        Callback=function(v) Weather.toggleRainbow(v) end })
+    wxDep:AddToggle('WeatherPuddles', { Text='Puddles', Default=(Config.WeatherPuddles or false),
+        Callback=function(v) Weather.togglePuddles(v) end })
+    wxDep:AddToggle('WeatherClockDial', { Text='Clock dial', Default=(Config.WeatherClockDial or false),
+        Callback=function(v) Weather.toggleClock(v) end })
+    wxDep:SetupDependencies({ { Toggles.Weather, true } })
+    local VM = Tabs.Visuals:AddLeftGroupbox('Viewmodel & Chams')
+    VM:AddToggle('VMOffsetEnabled', { Text='6-DOF transform', Default=(Config.VMOffsetEnabled or false),
+        Callback=function(v) Config.VMOffsetEnabled = v; pcall(Visuals.refreshViewModel) end })
+    local vmDep = VM:AddDependencyBox()
+    vmDep:AddDivider('Position')
+    vmDep:AddSlider('VMOffsetX', { Text='X', Default=(Config.VMOffsetX or 0), Min=-5, Max=5, Rounding=2, Compact=true,
+        Callback=function(v) Config.VMOffsetX = v end })
+    vmDep:AddSlider('VMOffsetY', { Text='Y', Default=(Config.VMOffsetY or 0), Min=-5, Max=5, Rounding=2, Compact=true,
+        Callback=function(v) Config.VMOffsetY = v end })
+    vmDep:AddSlider('VMOffsetZ', { Text='Z', Default=(Config.VMOffsetZ or 0), Min=-5, Max=5, Rounding=2, Compact=true,
+        Callback=function(v) Config.VMOffsetZ = v end })
+    vmDep:AddDivider('Rotation')
+    vmDep:AddSlider('VMOffsetPitch', { Text='Pitch', Default=(Config.VMOffsetPitch or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
+        Callback=function(v) Config.VMOffsetPitch = math.floor(v) end })
+    vmDep:AddSlider('VMOffsetYaw', { Text='Yaw', Default=(Config.VMOffsetYaw or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
+        Callback=function(v) Config.VMOffsetYaw = math.floor(v) end })
+    vmDep:AddSlider('VMOffsetRoll', { Text='Roll', Default=(Config.VMOffsetRoll or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
+        Callback=function(v) Config.VMOffsetRoll = math.floor(v) end })
+    vmDep:SetupDependencies({ { Toggles.VMOffsetEnabled, true } })
+    VM:AddDivider('Chams & Textures')
+    VM:AddToggle('VMChamsEnabled', { Text='Material chams', Default=(Config.VMChamsEnabled or false),
+        Callback=function(v) Config.VMChamsEnabled = v; pcall(Visuals.refreshViewModel) end })
+        :AddColorPicker('VMChamsColor', { Default=(Config.VMChamsColor or Color3.fromRGB(53, 215, 199)), Title='Cham Color',
+            Callback=function(v) Config.VMChamsColor = v end })
+    local vmcDep = VM:AddDependencyBox()
+    vmcDep:AddDropdown('VMChamsMaterial', { Values={'ForceField','Neon','Glass','SmoothPlastic'},
+        Default=(Config.VMChamsMaterial or 'ForceField'), Text='Material', Callback=function(v) Config.VMChamsMaterial = v end })
+    vmcDep:AddSlider('VMChamsTransparency', { Text='Transparency', Default=(Config.VMChamsTransparency or 0.5),
+        Min=0, Max=1, Rounding=2, Callback=function(v) Config.VMChamsTransparency = v end })
+    vmcDep:SetupDependencies({ { Toggles.VMChamsEnabled, true } })
+    VM:AddToggle('VMDisableTextures', { Text='Disable gun textures', Default=(Config.VMDisableTextures or false),
+        Callback=function(v) Config.VMDisableTextures = v; pcall(Visuals.refreshViewModel) end })
+    local RTB1 = Tabs.Visuals:AddRightTabbox('Effects & Camera')
+    local HL = RTB1:AddTab('Holograms')
+    local CM = RTB1:AddTab('Camera')
+    HL:AddToggle('VisualsHolograms', { Text='On-hit holograms', Default=(Config.VisualsHolograms or false),
+        Callback=function(v) Config.VisualsHolograms = v end })
+        :AddColorPicker('VisualsHologramColor', { Default=(Config.VisualsHologramColor or Color3.fromRGB(0, 220, 255)), Title='Core Color',
+            Callback=function(v) Config.VisualsHologramColor = v end })
+        :AddColorPicker('VisualsHologramAccent', { Default=(Config.VisualsHologramAccent or Color3.fromRGB(255, 60, 200)), Title='Halo Accent',
+            Callback=function(v) Config.VisualsHologramAccent = v end })
+    local holoDep = HL:AddDependencyBox()
+    holoDep:AddDropdown('VisualsHologramStyle', { Values={'Orb','Skeleton','Wraith'}, Default=(Config.VisualsHologramStyle or 'Orb'),
+        Text='Style', Callback=function(v) Config.VisualsHologramStyle = v end })
+    holoDep:AddSlider('VisualsHologramDuration', { Text='Duration', Default=(Config.VisualsHologramDuration or 3.5),
+        Min=0.5, Max=5, Rounding=1, Suffix='s', Callback=function(v) Config.VisualsHologramDuration = v end })
+    holoDep:AddSlider('VisualsHologramRange', { Text='Max range', Default=(Config.VisualsHologramRange or 300),
+        Min=20, Max=300, Rounding=0, Suffix=' studs', Callback=function(v) Config.VisualsHologramRange = math.floor(v) end })
+    holoDep:AddSlider('VisualsHologramVisibility', { Text='Visibility', Default=(Config.VisualsHologramVisibility or 1.4),
+        Min=0.2, Max=2, Rounding=1, Suffix='x', Callback=function(v) Config.VisualsHologramVisibility = v end })
+    holoDep:AddToggle('VisualsHologramLethal', { Text='Gold kill aura', Default=(Config.VisualsHologramLethal or true),
+        Callback=function(v) Config.VisualsHologramLethal = v end })
+    holoDep:SetupDependencies({ { Toggles.VisualsHolograms, true } })
+    CM:AddToggle('CameraFovOverride', { Text='FOV override', Default=(Config.CameraFovOverride or false),
+        Callback=function(v) Config.CameraFovOverride = v end })
+    local fovDep = CM:AddDependencyBox()
+    fovDep:AddSlider('CameraFovAmount', { Text='Field of view', Default=(Config.CameraFovAmount or 90),
+        Min=40, Max=130, Rounding=0, Suffix='°', Callback=function(v) Config.CameraFovAmount = math.floor(v) end })
+    fovDep:SetupDependencies({ { Toggles.CameraFovOverride, true } })
+    CM:AddToggle('CameraAspectRatioEnabled', { Text='Aspect ratio stretch', Default=(Config.CameraAspectRatioEnabled or false),
+        Callback=function(v) Config.CameraAspectRatioEnabled = v end })
+    local arDep = CM:AddDependencyBox()
+    arDep:AddSlider('CameraAspectRatioX', { Text='Width', Default=(Config.CameraAspectRatioX or 4),
+        Min=1, Max=21, Rounding=0, Compact=true, Callback=function(v) Config.CameraAspectRatioX = math.floor(v) end })
+    arDep:AddSlider('CameraAspectRatioY', { Text='Height', Default=(Config.CameraAspectRatioY or 3),
+        Min=1, Max=21, Rounding=0, Compact=true, Callback=function(v) Config.CameraAspectRatioY = math.floor(v) end })
+    arDep:SetupDependencies({ { Toggles.CameraAspectRatioEnabled, true } })
+    CM:AddToggle('ThirdPersonEnabled', { Text='Third person', Default=(Config.ThirdPersonEnabled or false),
+        Callback=function(v) Config.ThirdPersonEnabled = v end })
+    local tpDep = CM:AddDependencyBox()
+    tpDep:AddSlider('ThirdPersonDistance', { Text='Distance', Default=(Config.ThirdPersonDistance or 12),
+        Min=4, Max=30, Rounding=0, Suffix=' studs', Callback=function(v) Config.ThirdPersonDistance = math.floor(v) end })
+    tpDep:SetupDependencies({ { Toggles.ThirdPersonEnabled, true } })
+    local RTB2 = Tabs.Visuals:AddRightTabbox('Game & Profile')
+    local GL = RTB2:AddTab('Cosmetics')
+    local SP = RTB2:AddTab('Spoofer')
+    GL:AddToggle('GameVisuals', { Text='Enable', Default=(Config.GameVisuals or false),
+        Callback=function(v) if v then GameVisuals.enable() else GameVisuals.disable() end end })
+    local gvDep = GL:AddDependencyBox()
+    gvDep:AddToggle('GVUnlockAll', { Text='Unlock all', Default=(Config.GVUnlockAll or true),
+        Callback=function(v) pcall(GameVisuals.setUnlockAll, v) end })
+    gvDep:AddToggle('GVRemember', { Text='Remember picks', Default=(Config.GVRemember or true),
+        Callback=function(v) Config.GVRemember = v ; if v then pcall(GameVisuals.saveConfig) end end })
+    gvDep:AddToggle('GVEmotes', { Text='Unlock emotes', Default=(Config.GVEmotes or false),
+        Callback=function(v) pcall(GameVisuals.syncEmotes, v) end })
+    gvDep:AddDropdown('GVEmote', { Values = { 'None' }, Default = 'None', Text = 'Play emote',
+        Callback = function(v) pcall(GameVisuals.playEmote, v) end })
+    gvDep:AddButton({ Text='Reset all', Func=function() pcall(GameVisuals.restore) end })
+    gvDep:AddDivider('Ranked charm')
+    gvDep:AddToggle('GVRankCharmOn', { Text='Spoof ranked charm rank', Default=(Config.GVRankCharmOn or false),
+        Callback=function(v) Config.GVRankCharmOn = v ; if v then pcall(GameVisuals.refreshRankCharmMeta) end end })
+    gvDep:SetupDependencies({ { Toggles.GameVisuals, true } })
+    local rcDep = GL:AddDependencyBox()
+    rcDep:AddDropdown('GVRankWep', { Values = { 'Held weapon' }, Default = 'Held weapon',
+        Text = 'Ranked charm on', Callback = function(v) end })
+    rcDep:AddDropdown('GVRankLook', { Values = {}, Default = 'None',
+        Text = 'make it look like',
+        Callback = function(v)
+            if v == nil or v == 'None' then return end
+            local wv = 'Held weapon'
+            pcall(function() wv = Options.GVRankWep.Value or wv end)
+            pcall(GameVisuals.applyRankedCharm, v, wv)
+        end })
+    rcDep:AddInput('GVRankCharmLb', { Default = tostring(Config.GVRankCharmLb or 0), Numeric = true,
+        Text = '#N (optional, auto for Archnemesis)', Placeholder = '0', Finished = false,
+        Callback = function(v) Config.GVRankCharmLb = tonumber(v) or 0 ; pcall(GameVisuals.refreshRankCharmMeta) end })
+    rcDep:SetupDependencies({ { Toggles.GVRankCharmOn, true }, { Toggles.GameVisuals, true } })
+    GL:AddDivider('Manual picker')
+    local pickDep = GL:AddDependencyBox()
+    pickDep:AddDropdown('GVWeapon', { Values = { 'None' }, Default = 'None', Text = 'Weapon',
+        Callback = function(v) pcall(GameVisuals.setWeapon, v) end })
+    pickDep:AddDropdown('GVSkin', { Values = { 'None' }, Default = 'None', Text = 'Skin',
+        Callback = function(v) pcall(GameVisuals.setSkin, v) end })
+    pickDep:AddDropdown('GVCharm', { Values = { 'None' }, Default = 'None', Text = 'Charm',
+        Callback = function(v) pcall(GameVisuals.setCharm, v) end })
+    pickDep:AddDropdown('GVWrap', { Values = { 'None' }, Default = 'None', Text = 'Wrap',
+        Callback = function(v) pcall(GameVisuals.setWrap, v) end })
+    pickDep:AddDropdown('GVFinisher', { Values = { 'None' }, Default = 'None', Text = 'Finisher',
+        Callback = function(v) pcall(GameVisuals.setFinisher, v) end })
+    pickDep:AddToggle('GVWrapInverted', { Text='Invert wrap', Default=(Config.GVWrapInverted or false),
+        Callback=function(v) pcall(GameVisuals.setWrapInverted, v) end })
+    pickDep:SetupDependencies({ { Toggles.GameVisuals, true } })
+    task.spawn(function()
+        local sig = nil
+        while true do
+            task.wait(3)
+            local ok, lists = pcall(function()
+                return { GameVisuals.weaponList(), GameVisuals.skinList(), GameVisuals.charmList(),
+                         GameVisuals.wrapList(), GameVisuals.finisherList(), GameVisuals.rankNames(),
+                         GameVisuals.emoteList(), GameVisuals.rankedCharmsFor() }
+            end)
+            if ok and type(lists) == 'table' then
+                local lens = {}
+                for i = 1, 8 do lens[i] = lists[i] and #lists[i] or 0 end
+                local now = table.concat(lens, '/')
+                if now ~= sig then
+                    sig = now
+                    pcall(function() Options.GVWeapon:SetValues(lists[1]) end)
+                    pcall(function() Options.GVSkin:SetValues(lists[2]) end)
+                    pcall(function() Options.GVCharm:SetValues(lists[3]) end)
+                    pcall(function() Options.GVWrap:SetValues(lists[4]) end)
+                    pcall(function() Options.GVFinisher:SetValues(lists[5]) end)
+                    pcall(function() Options.GVRankLook:SetValues(lists[6]) end)
+                    pcall(function() Options.GVEmote:SetValues(lists[7]) end)
+                    pcall(function() Options.GVRankWep:SetValues(lists[8]) end)
+                end
+            end
+        end
+    end)
+    GL:AddDivider('Live Loaded')
+    local LOADED_LINES = 6
+    local loaded = {}
+    for i = 1, LOADED_LINES do loaded[i] = GL:AddLabel(' ', true) end
+    if type(loaded[1]) == 'table' and type(loaded[1].SetText) == 'function' then
+        task.spawn(function()
+            local shown = nil
+            while GameVisuals.uiAlive do
+                task.wait(0.35)
+                local lines = GameVisuals.summary()
+                if #lines == 0 then
+                    if Config.GameVisuals == true and GameVisuals.ready() ~= true then
+                        lines = { 'not active yet' }
+                    else
+                        lines = {}
+                    end
+                end
+                local joined = table.concat(lines, '\n')
+                if joined ~= shown then
+                    shown = joined
+                    for i = 1, LOADED_LINES do
+                        pcall(function() loaded[i]:SetText(lines[i] or ' ') end)
+                    end
+                end
+            end
+        end)
+    end
+    SP:AddDivider('Identity')
+    SP:AddToggle('SpooferNameEnabled', { Text='Spoof name', Default=(Config.SpooferNameEnabled or false),
+        Callback=function(v) Config.SpooferNameEnabled = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
+    local spNDep = SP:AddDependencyBox()
+    spNDep:AddInput('SpooferName', { Default=(Config.SpooferName or 'ProPlayer'), Text='Username',
+        Placeholder='Username', Finished=false,
+        Callback=function(v) Config.SpooferName = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
+    spNDep:AddInput('SpooferDisplayName', { Default=(Config.SpooferDisplayName or 'ProPlayer'), Text='Display name',
+        Placeholder='Display name', Finished=false,
+        Callback=function(v) Config.SpooferDisplayName = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
+    spNDep:SetupDependencies({ { Toggles.SpooferNameEnabled, true } })
+    SP:AddDivider('Ranked & Stats')
+    SP:AddToggle('SpooferLevelEnabled', { Text='Spoof level', Default=(Config.SpooferLevelEnabled or false),
+        Callback=function(v) Config.SpooferLevelEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spLDep = SP:AddDependencyBox()
+    spLDep:AddInput('SpooferLevel', { Default=tostring(Config.SpooferLevel or 100), Text='Level',
+        Placeholder='100', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferLevel = tonumber(v) or 100 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spLDep:SetupDependencies({ { Toggles.SpooferLevelEnabled, true } })
+    SP:AddToggle('SpooferRankedEloEnabled', { Text='Spoof ELO', Default=(Config.SpooferRankedEloEnabled or false),
+        Callback=function(v) Config.SpooferRankedEloEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spEDep = SP:AddDependencyBox()
+    spEDep:AddInput('SpooferRankedElo', { Default=tostring(Config.SpooferRankedElo or 2400), Text='ELO rating',
+        Placeholder='2400', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferRankedElo = tonumber(v) or 2400 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spEDep:SetupDependencies({ { Toggles.SpooferRankedEloEnabled, true } })
+    SP:AddToggle('SpooferCasualWinsEnabled', { Text='Spoof casual wins', Default=(Config.SpooferCasualWinsEnabled or false),
+        Callback=function(v) Config.SpooferCasualWinsEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spWDep = SP:AddDependencyBox()
+    spWDep:AddInput('SpooferCasualWins', { Default=tostring(Config.SpooferCasualWins or 500), Text='Casual wins',
+        Placeholder='500', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferCasualWins = tonumber(v) or 500 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spWDep:SetupDependencies({ { Toggles.SpooferCasualWinsEnabled, true } })
+    SP:AddToggle('SpooferRankedWinsEnabled', { Text='Spoof ranked wins', Default=(Config.SpooferRankedWinsEnabled or false),
+        Callback=function(v) Config.SpooferRankedWinsEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spRWDep = SP:AddDependencyBox()
+    spRWDep:AddInput('SpooferRankedWins', { Default=tostring(Config.SpooferRankedWins or 250), Text='Ranked wins',
+        Placeholder='250', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferRankedWins = tonumber(v) or 250 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spRWDep:SetupDependencies({ { Toggles.SpooferRankedWinsEnabled, true } })
+    SP:AddToggle('SpooferWinPercentEnabled', { Text='Spoof winrate', Default=(Config.SpooferWinPercentEnabled or false),
+        Callback=function(v) Config.SpooferWinPercentEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spPDep = SP:AddDependencyBox()
+    spPDep:AddInput('SpooferWinPercent', { Default=tostring(Config.SpooferWinPercent or 75), Text='Winrate %',
+        Placeholder='75', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferWinPercent = tonumber(v) or 75 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spPDep:SetupDependencies({ { Toggles.SpooferWinPercentEnabled, true } })
+    SP:AddToggle('SpooferWinStreakEnabled', { Text='Spoof win streak', Default=(Config.SpooferWinStreakEnabled or false),
+        Callback=function(v) Config.SpooferWinStreakEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spSDep = SP:AddDependencyBox()
+    spSDep:AddInput('SpooferWinStreak', { Default=tostring(Config.SpooferWinStreak or 25), Text='Win streak',
+        Placeholder='25', Finished=false, Numeric=true,
+        Callback=function(v) Config.SpooferWinStreak = tonumber(v) or 25 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spSDep:SetupDependencies({ { Toggles.SpooferWinStreakEnabled, true } })
+    SP:AddToggle('SpooferFavoriteMapEnabled', { Text='Spoof favorite map', Default=(Config.SpooferFavoriteMapEnabled or false),
+        Callback=function(v) Config.SpooferFavoriteMapEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    local spMDep = SP:AddDependencyBox()
+    spMDep:AddInput('SpooferFavoriteMap', { Default=tostring(Config.SpooferFavoriteMap or 'Arena'), Text='Map name',
+        Placeholder='Arena', Finished=false,
+        Callback=function(v) Config.SpooferFavoriteMap = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
+    spMDep:SetupDependencies({ { Toggles.SpooferFavoriteMapEnabled, true } })
+end)() end
 
 -- ==========================================
 -- Screen GUI Indicators 생성 (화면 중앙 표시)
