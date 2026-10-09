@@ -1974,7 +1974,7 @@ EmoteGroup:AddSlider('EmoteSpeedSlider', {
 })
 
 -- ==========================================
--- Misc 탭 (Device Spoof & Skin Changer)
+-- Misc 탭 (Device Spoof, Skin Changer & Hit Sound)
 -- ==========================================
 local Group = Tabs.Misc:AddLeftGroupbox('Device Spoofing')
 local SetControlsRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Replication"):WaitForChild("Fighter"):WaitForChild("SetControls")
@@ -2163,6 +2163,184 @@ SkinBox:AddButton('Unlock All', function()
         end)
     end)
 end)
+
+-- ==========================================
+-- Hit Sound 로직 및 LinoriaLib 그룹박스 통합
+-- ==========================================
+local HitSoundConfig = {
+    Enable = false,
+    RemoveDefaultSound = false,
+    Volume = 3,
+    Pitch = 1,
+    Selected = "rust",
+    NotifyEnable = false,
+    NotifyDuration = 3,
+    NotifyMsg = "Hit {target} for {damage}",
+}
+
+local SoundLibrary = {
+    ["windows xp"]                  = "rbxassetid://108009100115241",
+    ["minecraft bow"]               = "rbxassetid://3442683707",
+    ["neverlose"]                   = "rbxassetid://97643101798871",
+    ["steve"]                       = "rbxassetid://132883456216684",
+    ["among us"]                    = "rbxassetid://93866204681438",
+    ["bonk"]                        = "rbxassetid://5766898159",
+    ["rust"]                        = "rbxassetid://1255040462",
+    ["fatality"]                    = "rbxassetid://6534947869",
+    ["hitmarker"]                   = "rbxassetid://133749572213659",
+    ["csgo"]                        = "rbxassetid://5764885315",
+    ["minecraft success bow hit"]   = "rbxassetid://131197435969853",
+    ["sparkle"]                     = "rbxassetid://110241936966089",
+    ["rust hs"]                     = "rbxassetid://4764109000",
+}
+
+local SoundKeys = {}
+for k in pairs(SoundLibrary) do
+    SoundKeys[#SoundKeys + 1] = k
+end
+table.sort(SoundKeys)
+
+local fighter_controller, client_viewmodel
+
+pcall(function()
+    fighter_controller = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+end)
+
+pcall(function()
+    client_viewmodel = require(
+        LocalPlayer.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem.ClientViewModel
+    )
+end)
+
+if client_viewmodel and client_viewmodel.PlayHitmarkerSound then
+    local _originalPlayHitmarker = client_viewmodel.PlayHitmarkerSound
+    client_viewmodel.PlayHitmarkerSound = function(self, critical, pitch)
+        if not HitSoundConfig.Enable then
+            return _originalPlayHitmarker(self, critical, pitch)
+        end
+
+        if HitSoundConfig.Selected and SoundLibrary[HitSoundConfig.Selected] then
+            local ok = pcall(function()
+                self:_CreateHitmarkerSound(
+                    SoundLibrary[HitSoundConfig.Selected],
+                    HitSoundConfig.Volume,
+                    HitSoundConfig.Pitch,
+                    LocalPlayer.PlayerGui,
+                    true,
+                    1
+                )
+            end)
+            if not ok then
+                return _originalPlayHitmarker(self, critical, pitch)
+            end
+            if HitSoundConfig.RemoveDefaultSound then
+                return
+            end
+        end
+
+        return _originalPlayHitmarker(self, critical, pitch)
+    end
+end
+
+if fighter_controller and fighter_controller.LocalFighter then
+    local _localFighter = fighter_controller.LocalFighter
+    if _localFighter.ReplicateFromServer then
+        local _originalReplicate = _localFighter.ReplicateFromServer
+        _localFighter.ReplicateFromServer = function(self, eventType, ...)
+            if eventType == "DamageNumberEffect" and HitSoundConfig.NotifyEnable then
+                local args     = { ... }
+                local hit_root = args[1]
+                local damage   = args[2]
+                local headshot = args[3]
+
+                if hit_root and damage then
+                    local hitChar = hit_root.Parent
+                    if hitChar and hitChar:FindFirstChildOfClass("Humanoid") then
+                        local part = headshot and "Head" or "Body"
+                        local msg  = HitSoundConfig.NotifyMsg
+                        msg = msg:gsub("{target}", hitChar.Name)
+                        msg = msg:gsub("{damage}", tostring(math.floor(damage + 0.5)))
+                        msg = msg:gsub("{hitpart}", part)
+
+                        print("[HitNotify] " .. msg)
+                    end
+                end
+                return
+            end
+
+            return _originalReplicate(self, eventType, ...)
+        end
+    end
+end
+
+-- Misc 탭 내에 Hit Sound 그룹박스 추가
+local HitSoundGroup = Tabs.Misc:AddRightGroupbox('Hit Sound')
+
+HitSoundGroup:AddToggle('HitSoundEnable', {
+    Text = 'Enable Hit Sound',
+    Default = HitSoundConfig.Enable,
+    Callback = function(Value)
+        HitSoundConfig.Enable = Value
+    end
+})
+
+HitSoundGroup:AddDropdown('HitSoundDropdown', {
+    Values = SoundKeys,
+    Default = 7, -- 'rust' 기본 선택
+    Text = 'Sound Effect',
+    Callback = function(Value)
+        HitSoundConfig.Selected = Value
+    end
+})
+
+HitSoundGroup:AddSlider('HitSoundVolume', {
+    Text = 'Volume',
+    Default = HitSoundConfig.Volume,
+    Min = 0,
+    Max = 5,
+    Rounding = 1,
+    Callback = function(Value)
+        HitSoundConfig.Volume = Value
+    end
+})
+
+HitSoundGroup:AddSlider('HitSoundPitch', {
+    Text = 'Pitch',
+    Default = HitSoundConfig.Pitch,
+    Min = 0.5,
+    Max = 2,
+    Rounding = 2,
+    Callback = function(Value)
+        HitSoundConfig.Pitch = Value
+    end
+})
+
+HitSoundGroup:AddToggle('HitSoundRemoveDefault', {
+    Text = 'Remove Default Sound',
+    Default = HitSoundConfig.RemoveDefaultSound,
+    Callback = function(Value)
+        HitSoundConfig.RemoveDefaultSound = Value
+    end
+})
+
+HitSoundGroup:AddToggle('HitSoundNotifyEnable', {
+    Text = 'Hit Notify',
+    Default = HitSoundConfig.NotifyEnable,
+    Callback = function(Value)
+        HitSoundConfig.NotifyEnable = Value
+    end
+})
+
+HitSoundGroup:AddSlider('HitSoundNotifyDuration', {
+    Text = 'Notify Duration',
+    Default = HitSoundConfig.NotifyDuration,
+    Min = 1,
+    Max = 5,
+    Rounding = 1,
+    Callback = function(Value)
+        HitSoundConfig.NotifyDuration = Value
+    end
+})
 
 -- ==========================================
 -- ESP Render Loop
