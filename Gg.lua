@@ -14,86 +14,15 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
 local LocalPlayer = Players.LocalPlayer
+local lp = LocalPlayer
+local Camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- ==========================================
--- Extended Visuals 모듈 및 Config 폴백 정의
--- ==========================================
+-- Global Config & State Table (통합 관리)
 getgenv().Config = getgenv().Config or {}
-local Config = getgenv().Config
-
-getgenv().Visuals = getgenv().Visuals or {
-    enable = function() end,
-    disable = function() end,
-    setPreset = function() end,
-    setGrade = function() end,
-    setGradeStrength = function() end,
-    setBloom = function() end,
-    setBloomIntensity = function() end,
-    toggleFullbright = function() end,
-    toggleNoFog = function() end,
-    toggleRainbow = function() end,
-    togglePerf = function() end,
-    refreshViewModel = function() end,
-    applyGuiNameSpoof = function() end,
-    updatePlayerSpoofer = function() end,
-    PresetOrder = {'Neutral','Day','Night','Cyber','Sunset','Winter','Vaporwave'}
-}
-local Visuals = getgenv().Visuals
-
-getgenv().Weather = getgenv().Weather or {
-    enableWeather = function() end,
-    disableWeather = function() end,
-    setType = function() end,
-    setIntensity = function() end,
-    setVolume = function() end,
-    toggleMood = function() end,
-    toggleStorm = function() end,
-    toggleSkyFlash = function() end,
-    toggleMeteors = function() end,
-    setMeteorsRate = function() end,
-    toggleShootingStars = function() end,
-    setStarsRate = function() end,
-    setSkybox = function() end,
-    toggleCelestial = function() end,
-    toggleGodRays = function() end,
-    toggleRainbow = function() end,
-    togglePuddles = function() end,
-    toggleClock = function() end,
-    SkyboxOrder = {'Off','Space','Sunset','Clouds','Storm','Winter','Vaporwave'}
-}
-local Weather = getgenv().Weather
-
-getgenv().GameVisuals = getgenv().GameVisuals or {
-    enable = function() end,
-    disable = function() end,
-    setUnlockAll = function() end,
-    saveConfig = function() end,
-    syncEmotes = function() end,
-    playEmote = function() end,
-    restore = function() end,
-    refreshRankCharmMeta = function() end,
-    applyRankedCharm = function() end,
-    setWeapon = function() end,
-    setSkin = function() end,
-    setCharm = function() end,
-    setWrap = function() end,
-    setFinisher = function() end,
-    setWrapInverted = function() end,
-    weaponList = function() return {} end,
-    skinList = function() return {} end,
-    charmList = function() return {} end,
-    wrapList = function() return {} end,
-    finisherList = function() return {} end,
-    rankNames = function() return {} end,
-    emoteList = function() return {} end,
-    rankedCharmsFor = function() return {} end,
-    uiAlive = true,
-    summary = function() return {} end,
-    ready = function() return false end
-}
-local GameVisuals = getgenv().GameVisuals
+getgenv().State = getgenv().State or {}
 
 local Window = Library:CreateWindow({
     Title = 'Yumu Enchantment - discord.gg/qTV5c5Fn6',
@@ -432,11 +361,1029 @@ RagebotGroup:AddSlider('RagebotAttack', {
     end
 })
 
--- ==========================================
--- Visuals 탭 (ESP, Skybox, Indicators & Extended Visuals)
--- ==========================================
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox('ESP')
+-- ============================================================================
+-- VISUALS MODULE & UI INTEGRATION (COMPLETE EXTRACTED ENGINE)
+-- ============================================================================
 
+--------------------------------------------------------------------------------
+-- [1] Config Defaults Setup
+--------------------------------------------------------------------------------
+Config.Visuals = false
+Config.VisualsPreset = "Neutral"
+Config.VisualsPerformanceMode = false
+Config.VisualsFullbright = false
+Config.VisualsNoFog = false
+Config.VisualsHolograms = false
+Config.VisualsRainbowMap = false
+Config.VisualsRainbowMapSpeed = 0.15
+Config.VisualsStretch = 1.0
+Config.VisualsStretchMin = 0.5
+Config.VisualsStretchMax = 1.2
+Config.VisualsCameraSway = false
+Config.VisualsCameraSwayAmount = 0.5
+Config.VisualsHologramDuration = 3.5
+Config.VisualsHologramRange = 300
+Config.VisualsHologramVisibility = 1.4
+Config.VisualsHologramColor  = Color3.fromRGB(0, 220, 255)
+Config.VisualsHologramAccent = Color3.fromRGB(255, 60, 200)
+Config.VisualsGrade = "Crisp"
+Config.VisualsGradeStrength = 0.6
+Config.VisualsBloom = false
+Config.VisualsBloomIntensity = 1.0
+Config.VisualsVignette = false
+Config.VisualsVignetteStrength = 0.6
+Config.VisualsLetterbox = false
+Config.VisualsLetterboxSize = 0.10
+Config.VisualsDOF = false
+Config.VisualsDOFDistance = 28
+Config.VisualsDOFBlur = 0.5
+Config.VisualsHologramStyle = "Orb"
+Config.VisualsHologramLethal = true
+Config.VisualsHologramLethalColor = Color3.fromRGB(255, 200, 60)
+
+--------------------------------------------------------------------------------
+-- [2] Visuals Main Logic (Core Engine)
+--------------------------------------------------------------------------------
+local Visuals = {}
+;(function()
+    local _origLighting, _origClones = nil, {}
+    local _hologramFolder, _hologramCooldowns = nil, {}
+    local _stretchBound, _rainbowConn = false, nil
+    local _rainbowParts, _rainbowHue, _rainbowBatchIdx = {}, 0, 1
+    local _perfBackup, _origParticleRates = nil, {}
+    local _reassertConn, _reassertLastT = nil, 0
+    local LIGHTING_PROPS = {
+        "Brightness","ExposureCompensation","GlobalShadows","ShadowSoftness",
+        "EnvironmentDiffuseScale","EnvironmentSpecularScale","ClockTime",
+        "OutdoorAmbient","Ambient","FogEnd","FogStart","FogColor",
+        "ColorShift_Top","ColorShift_Bottom",
+    }
+    local function snapshotLighting()
+        if _origLighting then return end
+        _origLighting = {}
+        for _, p in ipairs(LIGHTING_PROPS) do
+            local ok, v = pcall(function() return Lighting[p] end)
+            if ok then _origLighting[p] = v end
+        end
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if not c:GetAttribute("VS_Custom") then
+                local ok, clone = pcall(function() return c:Clone() end)
+                if ok and clone then table.insert(_origClones, clone) end
+            end
+        end
+    end
+    local function clearTagged()
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if c:GetAttribute("VS_Custom") then c:Destroy() end
+        end
+    end
+    local function restore()
+        if not _origLighting then return end
+        clearTagged()
+        for k, v in pairs(_origLighting) do pcall(function() Lighting[k] = v end) end
+        local exist = {}
+        for _, c in ipairs(Lighting:GetChildren()) do exist[c.Name] = true end
+        for _, clone in ipairs(_origClones) do
+            if not exist[clone.Name] then clone:Clone().Parent = Lighting end
+        end
+    end
+    local function fx(cls, props)
+        local f = Instance.new(cls)
+        f:SetAttribute("VS_Custom", true)
+        for k, v in pairs(props) do f[k] = v end
+        f.Parent = Lighting
+        return f
+    end
+    local Presets = {}
+    Presets.Neutral = function()
+        clearTagged()
+        Lighting.Brightness = 2; Lighting.ExposureCompensation = 0
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.2
+        Lighting.EnvironmentDiffuseScale = 0.5; Lighting.EnvironmentSpecularScale = 0.5
+        Lighting.ClockTime = 14; Lighting.OutdoorAmbient = Color3.fromRGB(70,70,70)
+        Lighting.Ambient = Color3.fromRGB(0,0,0); Lighting.FogEnd = 100000
+        fx("Atmosphere", { Density=0.3, Offset=0.25, Color=Color3.fromRGB(199,199,199),
+            Decay=Color3.fromRGB(106,112,125), Glare=0, Haze=0 })
+    end
+    Presets.Cyberpunk = function()
+        clearTagged()
+        Lighting.Brightness = 2.6; Lighting.ExposureCompensation = 0.5
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.7
+        Lighting.EnvironmentDiffuseScale = 0.7; Lighting.EnvironmentSpecularScale = 1
+        Lighting.ClockTime = 0; Lighting.OutdoorAmbient = Color3.fromRGB(120,80,165)
+        Lighting.Ambient = Color3.fromRGB(80,55,120)
+        fx("Atmosphere", { Density=0.3, Offset=0.3, Color=Color3.fromRGB(160,70,215),
+            Decay=Color3.fromRGB(75,200,240), Glare=2.2, Haze=1 })
+        fx("BloomEffect", { Intensity=1.15, Size=24, Threshold=0.72 })
+        fx("ColorCorrectionEffect", { Brightness=0.04, Contrast=0.2, Saturation=0.45,
+            TintColor=Color3.fromRGB(220,195,255) })
+    end
+    Presets.Anime = function()
+        clearTagged()
+        Lighting.Brightness = 2.3; Lighting.ExposureCompensation = 0.2
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.7
+        Lighting.EnvironmentDiffuseScale = 0.7; Lighting.EnvironmentSpecularScale = 0.7
+        Lighting.ClockTime = 15; Lighting.OutdoorAmbient = Color3.fromRGB(150,140,170)
+        Lighting.Ambient = Color3.fromRGB(95,85,120)
+        fx("Atmosphere", { Density=0.28, Offset=0.35, Color=Color3.fromRGB(255,200,230),
+            Decay=Color3.fromRGB(150,195,255), Glare=1, Haze=0.8 })
+        fx("BloomEffect", { Intensity=1.0, Size=26, Threshold=0.8 })
+        fx("ColorCorrectionEffect", { Brightness=0.03, Contrast=0.14, Saturation=0.32,
+            TintColor=Color3.fromRGB(255,228,242) })
+    end
+    Presets.Sunset = function()
+        clearTagged()
+        Lighting.Brightness = 2.3; Lighting.ExposureCompensation = 0.4
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.5
+        Lighting.EnvironmentDiffuseScale = 0.75; Lighting.EnvironmentSpecularScale = 0.9
+        Lighting.ClockTime = 17.75; Lighting.OutdoorAmbient = Color3.fromRGB(185,115,80)
+        Lighting.Ambient = Color3.fromRGB(105,60,45)
+        fx("Atmosphere", { Density=0.38, Offset=0.55, Color=Color3.fromRGB(255,150,80),
+            Decay=Color3.fromRGB(255,105,60), Glare=1.8, Haze=1.6 })
+        fx("BloomEffect", { Intensity=0.9, Size=24, Threshold=0.78 })
+        fx("ColorCorrectionEffect", { Brightness=0.03, Contrast=0.16, Saturation=0.32,
+            TintColor=Color3.fromRGB(255,195,150) })
+    end
+    Presets.Vaporwave = function()
+        clearTagged()
+        Lighting.Brightness = 2.3; Lighting.ExposureCompensation = 0.4
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.7
+        Lighting.EnvironmentDiffuseScale = 0.6; Lighting.EnvironmentSpecularScale = 0.9
+        Lighting.ClockTime = 18.4; Lighting.OutdoorAmbient = Color3.fromRGB(150,90,165)
+        Lighting.Ambient = Color3.fromRGB(95,60,120)
+        fx("Atmosphere", { Density=0.34, Offset=0.4, Color=Color3.fromRGB(255,130,205),
+            Decay=Color3.fromRGB(110,200,255), Glare=1.8, Haze=1.3 })
+        fx("BloomEffect", { Intensity=1.05, Size=26, Threshold=0.74 })
+        fx("ColorCorrectionEffect", { Brightness=0.04, Contrast=0.18, Saturation=0.38,
+            TintColor=Color3.fromRGB(255,205,240) })
+    end
+    Presets.Void = function()
+        clearTagged()
+        Lighting.Brightness = 2.0; Lighting.ExposureCompensation = 0.25
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.9
+        Lighting.EnvironmentDiffuseScale = 0.5; Lighting.EnvironmentSpecularScale = 0.7
+        Lighting.ClockTime = 0; Lighting.OutdoorAmbient = Color3.fromRGB(85,95,135)
+        Lighting.Ambient = Color3.fromRGB(55,62,95)
+        fx("Atmosphere", { Density=0.35, Offset=0.2, Color=Color3.fromRGB(55,65,110),
+            Decay=Color3.fromRGB(95,110,180), Glare=0.3, Haze=0.8 })
+        fx("BloomEffect", { Intensity=0.8, Size=22, Threshold=0.76 })
+        fx("ColorCorrectionEffect", { Brightness=0.03, Contrast=0.16, Saturation=-0.2,
+            TintColor=Color3.fromRGB(190,200,255) })
+    end
+    Presets.Clarity = function()
+        clearTagged()
+        Lighting.Brightness = 2.6; Lighting.ExposureCompensation = 0
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 1
+        Lighting.EnvironmentDiffuseScale = 0.2; Lighting.EnvironmentSpecularScale = 0.1
+        Lighting.ClockTime = 14; Lighting.OutdoorAmbient = Color3.fromRGB(150,150,155)
+        Lighting.Ambient = Color3.fromRGB(120,120,125); Lighting.FogEnd = 1000000
+        fx("ColorCorrectionEffect", { Brightness=0.05, Contrast=0.25, Saturation=-0.2,
+            TintColor=Color3.fromRGB(255,255,255) })
+    end
+    Presets.Toxic = function()
+        clearTagged()
+        Lighting.Brightness = 2.2; Lighting.ExposureCompensation = 0.35
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.7
+        Lighting.EnvironmentDiffuseScale = 0.6; Lighting.EnvironmentSpecularScale = 0.8
+        Lighting.ClockTime = 1; Lighting.OutdoorAmbient = Color3.fromRGB(80,135,70)
+        Lighting.Ambient = Color3.fromRGB(45,85,50)
+        fx("Atmosphere", { Density=0.34, Offset=0.35, Color=Color3.fromRGB(95,220,110),
+            Decay=Color3.fromRGB(55,180,80), Glare=1.8, Haze=1.4 })
+        fx("BloomEffect", { Intensity=1.1, Size=24, Threshold=0.74 })
+        fx("ColorCorrectionEffect", { Brightness=0.04, Contrast=0.2, Saturation=0.45,
+            TintColor=Color3.fromRGB(210,255,205) })
+    end
+    Presets.Sakura = function()
+        clearTagged()
+        Lighting.Brightness = 2.2; Lighting.ExposureCompensation = 0.35
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.8
+        Lighting.EnvironmentDiffuseScale = 0.7; Lighting.EnvironmentSpecularScale = 0.7
+        Lighting.ClockTime = 15.5; Lighting.OutdoorAmbient = Color3.fromRGB(200,155,180)
+        Lighting.Ambient = Color3.fromRGB(120,85,110)
+        fx("Atmosphere", { Density=0.3, Offset=0.4, Color=Color3.fromRGB(255,205,225),
+            Decay=Color3.fromRGB(255,175,215), Glare=1.2, Haze=1 })
+        fx("BloomEffect", { Intensity=1.1, Size=26, Threshold=0.78 })
+        fx("ColorCorrectionEffect", { Brightness=0.04, Contrast=0.15, Saturation=0.28,
+            TintColor=Color3.fromRGB(255,225,240) })
+    end
+    Presets.Nebula = function()
+        clearTagged()
+        Lighting.Brightness = 2.2; Lighting.ExposureCompensation = 0.4
+        Lighting.GlobalShadows = false; Lighting.ShadowSoftness = 0.9
+        Lighting.EnvironmentDiffuseScale = 0.55; Lighting.EnvironmentSpecularScale = 0.85
+        Lighting.ClockTime = 0; Lighting.OutdoorAmbient = Color3.fromRGB(128,94,168)
+        Lighting.Ambient = Color3.fromRGB(82,60,120)
+        fx("Atmosphere", { Density=0.34, Offset=0.25, Color=Color3.fromRGB(120,70,180),
+            Decay=Color3.fromRGB(220,90,190), Glare=1.4, Haze=1.1 })
+        fx("BloomEffect", { Intensity=1.15, Size=24, Threshold=0.72 })
+        fx("ColorCorrectionEffect", { Brightness=0.03, Contrast=0.2, Saturation=0.4,
+            TintColor=Color3.fromRGB(235,205,255) })
+    end
+    local PresetScalars = {
+        Neutral   = { Brightness=2,   ExposureCompensation=0,    ClockTime=14,   OutdoorAmbient=Color3.fromRGB(70,70,70),
+                      Ambient=Color3.fromRGB(0,0,0),      FogEnd=100000,
+                      EnvironmentDiffuseScale=0.5,  EnvironmentSpecularScale=0.5 },
+        Clarity   = { Brightness=2.6, ExposureCompensation=0,    ClockTime=14,   OutdoorAmbient=Color3.fromRGB(150,150,155),
+                      Ambient=Color3.fromRGB(120,120,125), FogEnd=1000000,
+                      EnvironmentDiffuseScale=0.2,  EnvironmentSpecularScale=0.1 },
+        Cyberpunk = { Brightness=2.6, ExposureCompensation=0.5,  ClockTime=0,    OutdoorAmbient=Color3.fromRGB(120,80,165),
+                      Ambient=Color3.fromRGB(80,55,120),
+                      EnvironmentDiffuseScale=0.7,  EnvironmentSpecularScale=1 },
+        Anime     = { Brightness=2.3, ExposureCompensation=0.2,  ClockTime=15,   OutdoorAmbient=Color3.fromRGB(150,140,170),
+                      Ambient=Color3.fromRGB(95,85,120),
+                      EnvironmentDiffuseScale=0.7,  EnvironmentSpecularScale=0.7 },
+        Sunset    = { Brightness=2.3, ExposureCompensation=0.4,  ClockTime=17.75, OutdoorAmbient=Color3.fromRGB(185,115,80),
+                      Ambient=Color3.fromRGB(105,60,45),
+                      EnvironmentDiffuseScale=0.75, EnvironmentSpecularScale=0.9 },
+        Vaporwave = { Brightness=2.3, ExposureCompensation=0.4,  ClockTime=18.4, OutdoorAmbient=Color3.fromRGB(150,90,165),
+                      Ambient=Color3.fromRGB(95,60,120),
+                      EnvironmentDiffuseScale=0.6,  EnvironmentSpecularScale=0.9 },
+        Toxic     = { Brightness=2.2, ExposureCompensation=0.35, ClockTime=1,    OutdoorAmbient=Color3.fromRGB(80,135,70),
+                      Ambient=Color3.fromRGB(45,85,50),
+                      EnvironmentDiffuseScale=0.6,  EnvironmentSpecularScale=0.8 },
+        Void      = { Brightness=2.0, ExposureCompensation=0.25, ClockTime=0,    OutdoorAmbient=Color3.fromRGB(85,95,135),
+                      Ambient=Color3.fromRGB(55,62,95),
+                      EnvironmentDiffuseScale=0.5,  EnvironmentSpecularScale=0.7 },
+        Sakura    = { Brightness=2.2, ExposureCompensation=0.35, ClockTime=15.5, OutdoorAmbient=Color3.fromRGB(200,155,180),
+                      Ambient=Color3.fromRGB(120,85,110),
+                      EnvironmentDiffuseScale=0.7,  EnvironmentSpecularScale=0.7 },
+        Nebula    = { Brightness=2.2, ExposureCompensation=0.4,  ClockTime=0,    OutdoorAmbient=Color3.fromRGB(128,94,168),
+                      Ambient=Color3.fromRGB(82,60,120),
+                      EnvironmentDiffuseScale=0.55, EnvironmentSpecularScale=0.85 },
+    }
+    local _WHITE = Color3.new(1, 1, 1)
+    local function applyFullbrightOverride()
+        if not Config.VisualsFullbright then return end
+        pcall(function() if Lighting.Ambient ~= _WHITE then Lighting.Ambient = _WHITE end end)
+        pcall(function() if Lighting.OutdoorAmbient ~= _WHITE then Lighting.OutdoorAmbient = _WHITE end end)
+        pcall(function() if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end end)
+        pcall(function() if Lighting.Brightness < 2 then Lighting.Brightness = 2 end end)
+    end
+    local function applyFogOverride()
+        if not Config.VisualsNoFog then return end
+        pcall(function() if Lighting.FogEnd ~= 1e6 then Lighting.FogEnd = 1e6 end end)
+        pcall(function() if Lighting.FogStart ~= 1e6 then Lighting.FogStart = 1e6 end end)
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if c:IsA("Atmosphere") then
+                pcall(function() if c.Density ~= 0 then c.Density = 0 end end)
+            end
+        end
+    end
+    local function cfg(key, default)
+        local v = Config[key]
+        if v == nil then return default end
+        return v
+    end
+    local _GRADES = {
+        Crisp = { B = 0.03,  C = 0.20, S = 0.18,  tint = _WHITE },
+        Cold  = { B = -0.03, C = 0.28, S = -0.22, tint = Color3.fromRGB(196, 220, 255) },
+        Warm  = { B = 0.04,  C = 0.22, S = 0.15,  tint = Color3.fromRGB(255, 222, 180) },
+        Comp  = { B = -0.01, C = 0.40, S = 0.28,  tint = Color3.fromRGB(255, 248, 236) },
+    }
+    local _gradeFx = nil
+    local function getGradeFx()
+        if _gradeFx and _gradeFx.Parent then return _gradeFx end
+        local cc = Instance.new("ColorCorrectionEffect")
+        cc.Name = "_vs_grade"
+        cc:SetAttribute("VS_Grade", true)
+        cc.Parent = Lighting
+        _gradeFx = cc
+        return cc
+    end
+    local function reassertGrade()
+        local g = _GRADES[cfg("VisualsGrade", "None")]
+        if not g then
+            if _gradeFx and _gradeFx.Parent then
+                pcall(function() if _gradeFx.Enabled then _gradeFx.Enabled = false end end)
+            end
+            return
+        end
+        local s  = math.clamp(cfg("VisualsGradeStrength", 1), 0, 1)
+        local tB, tC, tS = g.B * s, g.C * s, g.S * s
+        local tT = g.tint:Lerp(_WHITE, 1 - s)
+        local cc = getGradeFx()
+        pcall(function()
+            if not cc.Enabled then cc.Enabled = true end
+            if math.abs(cc.Brightness - tB) > 0.001 then cc.Brightness = tB end
+            if math.abs(cc.Contrast   - tC) > 0.001 then cc.Contrast   = tC end
+            if math.abs(cc.Saturation - tS) > 0.001 then cc.Saturation = tS end
+            if cc.TintColor ~= tT then cc.TintColor = tT end
+        end)
+    end
+    local function clearGrade()
+        if _gradeFx then pcall(function() _gradeFx:Destroy() end); _gradeFx = nil end
+    end
+    local _bloomFx = nil
+    local function getBloomFx()
+        if _bloomFx and _bloomFx.Parent then return _bloomFx end
+        local b = Instance.new("BloomEffect")
+        b.Name = "_vs_bloom"; b:SetAttribute("VS_Bloom", true)
+        b.Size = 24; b.Threshold = 0.8; b.Intensity = 0
+        b.Parent = Lighting
+        _bloomFx = b
+        return b
+    end
+    local function reassertBloom()
+        if not cfg("VisualsBloom", false) then
+            if _bloomFx and _bloomFx.Parent then
+                pcall(function() if _bloomFx.Enabled then _bloomFx.Enabled = false end end)
+            end
+            return
+        end
+        local tI = math.clamp(cfg("VisualsBloomIntensity", 1), 0, 3)
+        local b = getBloomFx()
+        pcall(function()
+            if not b.Enabled then b.Enabled = true end
+            if math.abs(b.Intensity - tI) > 0.01 then b.Intensity = tI end
+        end)
+    end
+    local function clearBloom()
+        if _bloomFx then pcall(function() _bloomFx:Destroy() end); _bloomFx = nil end
+    end
+    local function reassertScalars()
+        local sc = PresetScalars[State.VisualsCurrentPreset or Config.VisualsPreset]
+        if sc then
+            for k, v in pairs(sc) do pcall(function() if Lighting[k] ~= v then Lighting[k] = v end end) end
+            pcall(function() if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end end)
+        end
+        applyFullbrightOverride()
+        applyFogOverride()
+        reassertGrade()
+        reassertBloom()
+    end
+    local function startReassert()
+        if _reassertConn then return end
+        _reassertConn = RunService.Heartbeat:Connect(function()
+            if not Config.Visuals or Config.VisualsPerformanceMode then return end
+            local now = tick()
+            if (now - _reassertLastT) < 1.0 then return end
+            _reassertLastT = now
+            reassertScalars()
+        end)
+    end
+    local function stopReassert()
+        if _reassertConn then _reassertConn:Disconnect(); _reassertConn = nil end
+    end
+    Visuals.PresetOrder = { "Neutral", "Clarity", "Cyberpunk", "Anime", "Sunset", "Vaporwave", "Toxic", "Void", "Sakura", "Nebula" }
+    local function applyPreset(name)
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        local fn = Presets[name]; if not fn then return end
+        pcall(fn); State.VisualsCurrentPreset = name; Config.VisualsPreset = name
+        reassertGrade()
+        reassertBloom()
+    end
+    local function getHoloFolder()
+        if _hologramFolder and _hologramFolder.Parent then return _hologramFolder end
+        local f = Instance.new("Folder"); f.Name = "_vs_holos"; f.Parent = Workspace
+        _hologramFolder = f; return f
+    end
+    local _GOLD = Color3.fromRGB(255, 200, 60)
+    local _EDGE    = Color3.fromRGB(155, 232, 255)
+    local _VISIBLE = Color3.fromRGB(41, 224, 255)
+    local function easeInOut(a) return a * a * (3 - 2 * a) end
+    local HOLO_SKEL_R15 = {
+        {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+        {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+        {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+        {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+        {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+    }
+    local HOLO_SKEL_R6 = {
+        {"Head","Torso"},
+        {"Torso","Left Arm"},{"Torso","Right Arm"},
+        {"Torso","Left Leg"},{"Torso","Right Leg"},
+    }
+    local function fadePop(container, parts, hl, dur, tr0)
+        tr0 = tr0 or 0.55
+        local startT = tick()
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if not container.Parent then if conn then conn:Disconnect() end return end
+            local a  = math.clamp((tick() - startT) / dur, 0, 1)
+            local e  = easeInOut(a)
+            local tr = tr0 + (1 - tr0) * e
+            for _, b in ipairs(parts) do b.Transparency = tr end
+            if hl then hl.OutlineTransparency = e end
+            if a >= 1 and conn then conn:Disconnect() end
+        end)
+        Debris:AddItem(container, dur + 0.2)
+    end
+    local function popSkeleton(char, dur, color)
+        local vis = math.clamp(cfg("VisualsHologramVisibility", 1.4), 0.2, 2)
+        local tr0 = math.clamp(1 - 0.45 * vis, 0, 0.91)
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+        local isR6 = (hum and hum.RigType == Enum.HumanoidRigType.R6) or (char:FindFirstChild("Torso") ~= nil)
+        local rig  = isR6 and HOLO_SKEL_R6 or HOLO_SKEL_R15
+        local model = Instance.new("Model")
+        model.Name = "_hs" .. math.random(10000, 99999)
+        local parts, n = {}, 0
+        for _, pair in ipairs(rig) do
+            local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+            if a and b then
+                local ap, bp = a.Position, b.Position
+                local len = (bp - ap).Magnitude
+                if len > 0.05 and len < 20 then
+                    local bone = Instance.new("Part")
+                    bone.Shape = Enum.PartType.Cylinder
+                    bone.Size = Vector3.new(len, 0.1 + 0.06 * vis, 0.1 + 0.06 * vis)
+                    bone.Material = Enum.Material.Neon
+                    bone.Color = color
+                    bone.Transparency = tr0
+                    bone.Anchored = true; bone.CanCollide = false; bone.CanQuery = false
+                    bone.CanTouch = false; bone.CastShadow = false; bone.Massless = true
+                    bone:SetAttribute("VS_Holo", true)
+                    bone.CFrame = CFrame.lookAt((ap + bp) * 0.5, bp) * CFrame.Angles(0, math.rad(90), 0)
+                    bone.Parent = model
+                    n = n + 1; parts[n] = bone
+                end
+            end
+        end
+        if n == 0 then model:Destroy(); return end
+        model.Parent = getHoloFolder()
+        fadePop(model, parts, nil, dur, tr0)
+    end
+    local _wraiths = {}
+    local function wraithCount()
+        local n = 0
+        for i = #_wraiths, 1, -1 do
+            local m = _wraiths[i]
+            if m and m.Parent then n = n + 1 else table.remove(_wraiths, i) end
+        end
+        return n
+    end
+    local STRIP_CLASSES = {
+        "Humanoid","Sound","ParticleEmitter","Trail","Beam","Fire","Smoke","Sparkles",
+        "ForceField","Highlight","BillboardGui","SurfaceGui","BaseScript",
+    }
+    local function popWraith(char, dur, color)
+        if wraithCount() >= 4 then return end
+        local vis = math.clamp(cfg("VisualsHologramVisibility", 1.4), 0.2, 2)
+        local tr0 = math.clamp(1 - 0.45 * vis, 0, 0.91)
+        local clone
+        pcall(function()
+            local was = char.Archivable
+            char.Archivable = true
+            clone = char:Clone()
+            char.Archivable = was
+        end)
+        if not clone then return end
+        clone.Name = "_hw" .. math.random(10000, 99999)
+        local parts, n = {}, 0
+        for _, d in ipairs(clone:GetDescendants()) do
+            local strip = false
+            for _, cls in ipairs(STRIP_CLASSES) do
+                if d:IsA(cls) then strip = true break end
+            end
+            if strip then
+                pcall(function() d:Destroy() end)
+            elseif d:IsA("BasePart") then
+                d.Anchored = true; d.CanCollide = false; d.CanQuery = false
+                d.CanTouch = false; d.CastShadow = false; d.Massless = true
+                d:SetAttribute("VS_Holo", true)
+                if d.Transparency < 0.98 then
+                    d.Material = Enum.Material.ForceField
+                    d.Color = color
+                    d.Transparency = tr0
+                    n = n + 1; parts[n] = d
+                else
+                    d.Transparency = 1
+                end
+            end
+        end
+        if n == 0 then clone:Destroy(); return end
+        clone:SetAttribute("VS_Holo", true)
+        clone.Parent = getHoloFolder()
+        local hl
+        pcall(function()
+            local h = Instance.new("Highlight")
+            h.FillTransparency = 1
+            h.OutlineColor = _WHITE
+            h.OutlineTransparency = 0
+            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            h.Adornee = clone
+            h.Parent = clone
+            hl = h
+        end)
+        table.insert(_wraiths, clone)
+        fadePop(clone, parts, hl, dur, tr0)
+    end
+    local function createHologram(character, lethal)
+        if not character or not character.Parent then return end
+        local rp = character:FindFirstChild("HitboxHead")
+            or character:FindFirstChild("Head")
+            or character:FindFirstChild("HumanoidRootPart")
+            or character:FindFirstChild("UpperTorso")
+        if not rp then return end
+        if (rp.Position - Camera.CFrame.Position).Magnitude > Config.VisualsHologramRange then return end
+        if #getHoloFolder():GetChildren() >= 16 then return end
+        local dur = math.clamp(Config.VisualsHologramDuration or 3.5, 0.25, 10)
+        local lethalOn  = lethal and cfg("VisualsHologramLethal", true)
+        local mainColor = lethalOn and cfg("VisualsHologramLethalColor", _GOLD) or Config.VisualsHologramColor
+        local style = cfg("VisualsHologramStyle", "Orb")
+        if Config.VisualsPerformanceMode and style == "Wraith" then style = "Orb" end
+        if style == "Skeleton" then popSkeleton(character, dur, mainColor); return end
+        if style == "Wraith"   then popWraith(character, dur, mainColor);   return end
+        local folder = getHoloFolder()
+        local function mkBall(size, transp, color)
+            local b = Instance.new("Part")
+            b.Shape = Enum.PartType.Ball
+            b.Size = Vector3.new(size, size, size)
+            b.Material = Enum.Material.Neon
+            b.Color = color
+            b.Transparency = transp
+            b.Anchored = true; b.CanCollide = false; b.CanQuery = false
+            b.CanTouch = false; b.CastShadow = false; b.Massless = true
+            b:SetAttribute("VS_Holo", true)
+            return b
+        end
+        local vis = math.clamp(cfg("VisualsHologramVisibility", 1.4), 0.2, 2)
+        local sc  = 0.75 + 0.25 * vis
+        local h0  = math.clamp(0.65 / vis, 0.1, 0.9)
+        local core = mkBall(0.7 * sc, 0.05, mainColor)
+        local halo = mkBall(1.7 * sc, h0, mainColor)
+        local startCF = CFrame.new(rp.Position)
+        core.CFrame = startCF; halo.CFrame = startCF
+        core.Name = "_h" .. math.random(10000, 99999); halo.Name = core.Name .. "_g"
+        core.Parent = folder; halo.Parent = folder
+        local shockColor = Config.VisualsHologramAccent or Config.VisualsHologramColor
+        local shock = mkBall(0.5, 0.15, shockColor)
+        shock.Shape = Enum.PartType.Cylinder
+        shock.Size  = Vector3.new(0.1, 0.5, 0.5)
+        do
+            local cam = workspace.CurrentCamera
+            if cam then shock.CFrame = CFrame.lookAt(rp.Position, cam.CFrame.Position) * CFrame.Angles(0, math.rad(90), 0)
+            else shock.CFrame = startCF * CFrame.Angles(0, 0, math.rad(90)) end
+        end
+        shock.Name = core.Name .. "_s"
+        shock.Parent = folder
+        local startT = tick()
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if not core.Parent then if conn then conn:Disconnect() end return end
+            local alpha = math.clamp((tick() - startT) / dur, 0, 1)
+            local rise  = 2.5 * (1 - (1 - alpha) * (1 - alpha))
+            local cf    = startCF + Vector3.new(0, rise, 0)
+            core.CFrame = cf; halo.CFrame = cf
+            core.Transparency = math.clamp(0.05 + 0.95 * alpha, 0, 1)
+            halo.Transparency = math.clamp(h0 + (1 - h0) * alpha, 0, 1)
+            if shock.Parent then
+                local sa = math.clamp((tick() - startT) / 0.3, 0, 1)
+                local se = 1 - (1 - sa) * (1 - sa)
+                local sd = 0.5 + 3.5 * se
+                shock.Size = Vector3.new(0.1, sd, sd)
+                shock.Transparency = math.clamp(0.15 + 0.85 * sa, 0, 1)
+            end
+            if alpha >= 1 and conn then conn:Disconnect() end
+        end)
+        Debris:AddItem(core, dur + 0.2)
+        Debris:AddItem(halo, dur + 0.2)
+        Debris:AddItem(shock, 0.5)
+    end
+
+    local applyCamFrame, clearCamFrame
+    ;(function()
+        local TweenService = game:GetService("TweenService")
+        local _camGui, _vgFrames, _lbTop, _lbBot, _dof = nil, nil, nil, nil, nil
+        local C_BLACK_FRAME = Color3.new(0, 0, 0)
+        local function ensureCamGui()
+            if _camGui and _camGui.Parent then return _camGui end
+            local g = Instance.new("ScreenGui")
+            g.Name = "_vs_cam"
+            g.IgnoreGuiInset = true; g.ResetOnSpawn = false
+            g.DisplayOrder = 990
+            local ok = pcall(function() g.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+            if not ok or not g.Parent then
+                pcall(function() g.Parent = lp:FindFirstChildOfClass("PlayerGui") end)
+            end
+            _camGui = g
+            return g
+        end
+        local VG_SIDES = {
+            { size = UDim2.new(1, 0, 0.24, 0),  pos = UDim2.new(0, 0, 0, 0),     rot = 90  },
+            { size = UDim2.new(1, 0, 0.24, 0),  pos = UDim2.new(0, 0, 0.76, 0),  rot = 270 },
+            { size = UDim2.new(0.17, 0, 1, 0),  pos = UDim2.new(0, 0, 0, 0),     rot = 0   },
+            { size = UDim2.new(0.17, 0, 1, 0),  pos = UDim2.new(0.83, 0, 0, 0),  rot = 180 },
+        }
+        local function vgApply()
+            local on = Config.Visuals and cfg("VisualsVignette", false)
+            if not on then
+                if _vgFrames then
+                    for i = 1, #_vgFrames do _vgFrames[i].Visible = false end
+                end
+                return
+            end
+            if not _vgFrames then
+                local g = ensureCamGui()
+                _vgFrames = {}
+                for i = 1, #VG_SIDES do
+                    local s = VG_SIDES[i]
+                    local f = Instance.new("Frame")
+                    f.Name = "_cv" .. i
+                    f.BackgroundColor3 = C_BLACK_FRAME; f.BorderSizePixel = 0
+                    f.Size = s.size; f.Position = s.pos; f.Visible = false; f.ZIndex = 1
+                    local grad = Instance.new("UIGradient")
+                    grad.Rotation = s.rot
+                    grad.Transparency = NumberSequence.new(0, 1)
+                    grad.Parent = f
+                    f.Parent = g
+                    _vgFrames[i] = f
+                end
+            end
+            local tr = 1 - 0.85 * math.clamp(cfg("VisualsVignetteStrength", 0.6), 0, 1)
+            for i = 1, #_vgFrames do
+                local f = _vgFrames[i]
+                f.BackgroundTransparency = tr; f.Visible = true
+            end
+        end
+        local LB_TI = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local function lbApply(animate)
+            local on = Config.Visuals and cfg("VisualsLetterbox", false)
+            if not on and not _lbTop then return end
+            if not _lbTop then
+                local g = ensureCamGui()
+                for i = 1, 2 do
+                    local f = Instance.new("Frame")
+                    f.Name = "_clb" .. i
+                    f.BackgroundColor3 = C_BLACK_FRAME; f.BackgroundTransparency = 0
+                    f.BorderSizePixel = 0; f.ZIndex = 2
+                    f.Parent = g
+                    if i == 1 then _lbTop = f else _lbBot = f end
+                end
+                _lbTop.Position = UDim2.new(0, 0, -0.2, 0)
+                _lbBot.Position = UDim2.new(0, 0, 1, 0)
+            end
+            local sz = math.clamp(cfg("VisualsLetterboxSize", 0.10), 0.04, 0.18)
+            local topP = on and UDim2.new(0, 0, 0, 0)      or UDim2.new(0, 0, -sz - 0.02, 0)
+            local botP = on and UDim2.new(0, 0, 1 - sz, 0) or UDim2.new(0, 0, 1.02, 0)
+            _lbTop.Size = UDim2.new(1, 0, sz, 0); _lbBot.Size = UDim2.new(1, 0, sz, 0)
+            if animate then
+                pcall(function()
+                    TweenService:Create(_lbTop, LB_TI, { Position = topP }):Play()
+                    TweenService:Create(_lbBot, LB_TI, { Position = botP }):Play()
+                end)
+            else
+                _lbTop.Position = topP; _lbBot.Position = botP
+            end
+        end
+        local function dofApply()
+            local on = Config.Visuals and not Config.VisualsPerformanceMode and cfg("VisualsDOF", false)
+            if not on then
+                if _dof then pcall(function() _dof:Destroy() end); _dof = nil end
+                return
+            end
+            if not (_dof and _dof.Parent) then
+                local d = Instance.new("DepthOfFieldEffect")
+                d.Name = "_vs_dof"; d:SetAttribute("VS_DoF", true)
+                d.InFocusRadius = 22
+                d.Parent = Lighting
+                _dof = d
+            end
+            local blur = math.clamp(cfg("VisualsDOFBlur", 0.5), 0, 1)
+            pcall(function()
+                _dof.FocusDistance = math.clamp(cfg("VisualsDOFDistance", 28), 5, 100)
+                _dof.FarIntensity  = 0.75 * blur
+                _dof.NearIntensity = 0.5  * blur
+            end)
+        end
+        applyCamFrame = function(animate) vgApply(); lbApply(animate); dofApply() end
+        clearCamFrame = function()
+            if _camGui then pcall(function() _camGui:Destroy() end) end
+            _camGui, _vgFrames, _lbTop, _lbBot = nil, nil, nil, nil
+            if _dof then pcall(function() _dof:Destroy() end); _dof = nil end
+        end
+    end)()
+
+    local _fovSaved = nil
+    local _tpRP = nil
+    local function bindStretch()
+        if _stretchBound then return end
+        _stretchBound = true
+        RunService:BindToRenderStep("VS_Stretch", Enum.RenderPriority.Last.Value, function()
+            if not Config.Visuals then return end
+            local s = Config.VisualsStretch
+            local doStretch = math.abs(s - 1.0) >= 0.001
+            local doSway = Config.VisualsCameraSway
+            if Config.CameraFovOverride then
+                local want = math.clamp(Config.CameraFovAmount or 90, 40, 130)
+                if _fovSaved == nil then _fovSaved = Camera.FieldOfView end
+                if Camera.FieldOfView ~= want then Camera.FieldOfView = want end
+            elseif _fovSaved ~= nil then
+                Camera.FieldOfView = _fovSaved; _fovSaved = nil
+            end
+            if not (doStretch or doSway) then return end
+            local c = Camera.CFrame
+            if doSway then
+                local amt = math.clamp(Config.VisualsCameraSwayAmount or 0.5, 0, 1)
+                local t = tick()
+                local roll  = (math.sin(t * 0.9) + math.sin(t * 0.37) * 0.6) * amt
+                local pitch =  math.sin(t * 1.3) * 0.7 * amt
+                local yaw   =  math.sin(t * 0.7) * 0.8 * amt
+                c = c * CFrame.Angles(math.rad(pitch), math.rad(yaw), math.rad(roll))
+            end
+            if doStretch then
+                c = CFrame.fromMatrix(c.Position, c.RightVector * s, c.UpVector)
+            end
+            Camera.CFrame = c
+        end)
+    end
+
+    local _spooferActive = false
+    local _spooferConns = {}
+    local _isSpoofing = {}
+    local _origText = {}
+    local function anySpoofOn()
+        return Config.SpooferNameEnabled or Config.SpooferLevelEnabled or Config.SpooferCasualWinsEnabled
+            or Config.SpooferRankedWinsEnabled or Config.SpooferRankedEloEnabled
+            or Config.SpooferWinPercentEnabled or Config.SpooferWinStreakEnabled
+            or Config.SpooferFavoriteMapEnabled
+    end
+    local function escPat(s) return (s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")) end
+    local function escRep(s) return (s:gsub("%%", "%%%%")) end
+    local function belongsToLp(obj)
+        local node, depth = obj, 0
+        while node ~= nil and node ~= game and depth < 12 do
+            if node:IsA("BillboardGui") then
+                local anchor = node.Adornee or node.Parent
+                while anchor ~= nil and not anchor:IsA("Model") do anchor = anchor.Parent end
+                if anchor ~= nil then
+                    local plr = Players:GetPlayerFromCharacter(anchor)
+                    if plr ~= nil then return plr == lp end
+                end
+            elseif node:IsA("Model") then
+                local plr = Players:GetPlayerFromCharacter(node)
+                if plr ~= nil then return plr == lp end
+            end
+            local asId = tonumber(node.Name)
+            if asId ~= nil and Players:GetPlayerByUserId(asId) ~= nil then return asId == lp.UserId end
+            node = node.Parent; depth = depth + 1
+        end
+        return true
+    end
+    local ALLOWED_TEXT_NAMES = {
+        DisplayName = true, Username = true, Name = true, Handle = true, Nametag = true,
+        Title = true, TitleText = true, Value = true, Text = true, Label = true,
+        Wins = true, WinRate = true, Streak = true, WinStreak = true, ELO = true, Level = true,
+    }
+    local function applyTextSpoof(obj)
+        if not (obj and obj.Parent) then return end
+        if _isSpoofing[obj] then return end
+        local text = obj.Text
+        if not text or #text == 0 then return end
+        local newText = text
+        local changed = false
+        if Config.SpooferNameEnabled then
+            local fakeName = Config.SpooferName or "ProPlayer"
+            local fakeDisp = Config.SpooferDisplayName or fakeName
+            local realName = lp.Name
+            local realDisp = lp.DisplayName
+            if realDisp and #realDisp > 0 and newText:find(realDisp, 1, true) then
+                newText = newText:gsub(escPat(realDisp), escRep(fakeDisp))
+                changed = true
+            end
+            if realName and #realName > 0 and newText:find(realName, 1, true) then
+                newText = newText:gsub(escPat(realName), escRep(fakeName))
+                changed = true
+            end
+        end
+        local pn = obj.Parent and obj.Parent.Name or ""
+        local on = obj.Name
+        local isVal = (on == "Value" or on == "Text")
+        local is_level = (pn == "Level" or pn == "LevelContainer") and (isVal or on == "Level")
+        local is_wins = (on == "Wins" or pn == "Wins" or pn == "WinsContainer") and (isVal or on == "Wins")
+        local is_elo = (pn == "ELO" or pn == "RankedElo" or pn == "Rating" or pn == "Rank") and (isVal or on == "ELO")
+        local is_winrate = (on == "WinRate" or on == "win rate" or pn == "WinRate") and (isVal or on == "WinRate")
+        local is_streak = (pn == "Streak" or pn == "WinStreak" or pn == "StreakContainer" or on == "Streak" or on == "WinStreak")
+            and (isVal or on == "Streak" or on == "WinStreak")
+        if (is_level or is_wins or is_elo or is_winrate or is_streak) and belongsToLp(obj) then
+            local sVal = nil
+            if Config.SpooferLevelEnabled and is_level then sVal = tostring(Config.SpooferLevel or 100)
+            elseif Config.SpooferCasualWinsEnabled and is_wins then sVal = tostring(Config.SpooferCasualWins or 500)
+            elseif Config.SpooferRankedEloEnabled and is_elo then sVal = tostring(Config.SpooferRankedElo or 2400)
+            elseif Config.SpooferWinPercentEnabled and is_winrate then sVal = tostring(Config.SpooferWinPercent or 75) .. "%"
+            elseif Config.SpooferWinStreakEnabled and is_streak then sVal = tostring(Config.SpooferWinStreak or 25)
+            end
+            if sVal ~= nil and newText ~= sVal then newText = sVal; changed = true end
+        end
+        if changed and newText ~= text then
+            if _origText[obj] == nil then _origText[obj] = text end
+            _isSpoofing[obj] = true
+            pcall(function() obj.Text = newText end)
+            _isSpoofing[obj] = nil
+        end
+    end
+    local function registerTextObj(obj)
+        if not (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then return end
+        if _spooferConns[obj] ~= nil then return end
+        local txt = nil
+        pcall(function() txt = obj.Text end)
+        local mine = type(txt) == "string" and #txt > 0
+            and ((#lp.Name > 0 and txt:find(lp.Name, 1, true) ~= nil)
+              or (#lp.DisplayName > 0 and txt:find(lp.DisplayName, 1, true) ~= nil))
+        if not ALLOWED_TEXT_NAMES[obj.Name] and not mine then return end
+        applyTextSpoof(obj)
+        _spooferConns[obj] = obj:GetPropertyChangedSignal("Text"):Connect(function() applyTextSpoof(obj) end)
+        obj.Destroying:Once(function()
+            local c = _spooferConns[obj]
+            if c ~= nil then pcall(function() c:Disconnect() end) end
+            _spooferConns[obj] = nil; _origText[obj] = nil; _isSpoofing[obj] = nil
+        end)
+    end
+    local function stopGuiNameSpoofer()
+        for k, c in pairs(_spooferConns) do
+            pcall(function() c:Disconnect() end)
+            _spooferConns[k] = nil
+        end
+        for obj, t in pairs(_origText) do
+            pcall(function()
+                if obj.Parent ~= nil then
+                    _isSpoofing[obj] = true; obj.Text = t; _isSpoofing[obj] = nil
+                end
+            end)
+            _origText[obj] = nil
+        end
+        _isSpoofing = {}
+        _spooferActive = false
+    end
+    local function startGuiNameSpoofer()
+        if _spooferActive or not anySpoofOn() then return end
+        _spooferActive = true
+        local pGui = lp:FindFirstChildOfClass("PlayerGui")
+        if pGui then
+            for _, inst in ipairs(pGui:GetDescendants()) do registerTextObj(inst) end
+            _spooferConns["pGuiDesc"] = pGui.DescendantAdded:Connect(registerTextObj)
+        end
+        pcall(function()
+            local cGui = (gethui and gethui()) or cloneref(game:GetService("CoreGui"))
+            if cGui then
+                for _, inst in ipairs(cGui:GetDescendants()) do registerTextObj(inst) end
+                _spooferConns["cGuiDesc"] = cGui.DescendantAdded:Connect(registerTextObj)
+            end
+        end)
+    end
+    local function refreshGuiNameSpoofer()
+        if not anySpoofOn() then stopGuiNameSpoofer(); return end
+        if not _spooferActive then startGuiNameSpoofer(); return end
+        for obj in pairs(_spooferConns) do
+            if typeof(obj) == "Instance" then pcall(applyTextSpoof, obj) end
+        end
+    end
+
+    local function startRainbow()
+        if _rainbowConn then return end
+        _rainbowBatchIdx = 1; table.clear(_rainbowParts)
+        local charSet = {}
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl.Character then charSet[pl.Character] = true end
+        end
+        for _, d in ipairs(Workspace:GetDescendants()) do
+            if d:IsA("BasePart") and not d:GetAttribute("VS_Holo")
+                and not charSet[d.Parent]
+                and d.Name ~= "Terrain" then
+                table.insert(_rainbowParts, { part = d, originalColor = d.Color })
+            end
+        end
+        _rainbowConn = RunService.Heartbeat:Connect(function(dt)
+            if not Config.Visuals or not Config.VisualsRainbowMap then return end
+            _rainbowHue = (_rainbowHue + dt * Config.VisualsRainbowMapSpeed) % 1
+            local total = #_rainbowParts; if total == 0 then return end
+            local batch = math.min(250, total)
+            for i = 1, batch do
+                local idx = ((_rainbowBatchIdx - 1 + i - 1) % total) + 1
+                local e   = _rainbowParts[idx]
+                if e and e.part and e.part.Parent then
+                    e.part.Color = Color3.fromHSV((_rainbowHue + (idx / total) * 0.3) % 1, 0.85, 1)
+                end
+            end
+            _rainbowBatchIdx = ((_rainbowBatchIdx + batch - 1) % total) + 1
+        end)
+    end
+    local function stopRainbow()
+        if _rainbowConn then _rainbowConn:Disconnect(); _rainbowConn = nil end
+        for _, e in ipairs(_rainbowParts) do
+            if e.part and e.part.Parent then pcall(function() e.part.Color = e.originalColor end) end
+        end
+        table.clear(_rainbowParts)
+    end
+    function Visuals.toggleRainbowMap(on)
+        Config.VisualsRainbowMap = on
+        if on and Config.Visuals then startRainbow() else stopRainbow() end
+    end
+    local function applyPerf()
+        if not _perfBackup then
+            _perfBackup = {
+                GlobalShadows = Lighting.GlobalShadows,
+                EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+                EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+                Brightness = Lighting.Brightness,
+                ShadowSoftness = Lighting.ShadowSoftness,
+            }
+        end
+        clearTagged(); clearGrade(); clearBloom()
+        Lighting.GlobalShadows = false; Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0; Lighting.Brightness = 2
+        Lighting.ShadowSoftness = 0
+        for _, d in ipairs(Workspace:GetDescendants()) do
+            if d:IsA("ParticleEmitter") and not d:GetAttribute("VS_Holo") then
+                if not _origParticleRates[d] then _origParticleRates[d] = d.Rate end
+                d.Rate = 0
+            end
+        end
+    end
+    local function disablePerf()
+        if _perfBackup then
+            for k, v in pairs(_perfBackup) do pcall(function() Lighting[k] = v end) end
+            _perfBackup = nil
+        end
+        for em, rate in pairs(_origParticleRates) do
+            if em and em.Parent then pcall(function() em.Rate = rate end) end
+        end
+        table.clear(_origParticleRates)
+        if State.VisualsCurrentPreset then applyPreset(State.VisualsCurrentPreset) end
+    end
+    function Visuals.togglePerf(on)
+        Config.VisualsPerformanceMode = on
+        if on then applyPerf() else disablePerf() end
+        applyCamFrame(false)
+    end
+    function Visuals.setPreset(name)
+        if Presets[name] then
+            Config.VisualsPreset = name
+            applyPreset(name)
+        end
+    end
+    Visuals.PresetOrder = { "Neutral", "Clarity", "Cyberpunk", "Anime", "Sunset", "Vaporwave", "Toxic", "Void", "Sakura", "Nebula" }
+    Visuals.GradeOrder = { "None", "Crisp", "Cold", "Warm", "Comp" }
+    function Visuals.setGrade(name)
+        Config.VisualsGrade = name
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        reassertGrade()
+    end
+    function Visuals.setGradeStrength(v)
+        Config.VisualsGradeStrength = math.clamp(v, 0, 1)
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        reassertGrade()
+    end
+    function Visuals.setBloom(on)
+        Config.VisualsBloom = on
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        reassertBloom()
+    end
+    function Visuals.setBloomIntensity(v)
+        Config.VisualsBloomIntensity = math.clamp(v, 0, 3)
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        reassertBloom()
+    end
+    function Visuals.toggleFullbright(on)
+        Config.VisualsFullbright = on
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        if on then applyFullbrightOverride()
+        else applyPreset(State.VisualsCurrentPreset or Config.VisualsPreset or "Neutral") end
+    end
+    function Visuals.toggleNoFog(on)
+        Config.VisualsNoFog = on
+        if not Config.Visuals or Config.VisualsPerformanceMode then return end
+        if on then applyFogOverride()
+        else applyPreset(State.VisualsCurrentPreset or Config.VisualsPreset or "Neutral") end
+    end
+    Visuals.applyGuiNameSpoof = refreshGuiNameSpoofer
+
+    function Visuals.init()
+        snapshotLighting()
+        if Config.Visuals then bindStretch() end
+        refreshGuiNameSpoofer()
+    end
+    function Visuals.enable()
+        Config.Visuals = true; applyPreset(Config.VisualsPreset or "Neutral")
+        if not Config.VisualsPerformanceMode then
+            applyFullbrightOverride(); applyFogOverride()
+        end
+        bindStretch()
+        refreshGuiNameSpoofer()
+        if Config.VisualsRainbowMap then startRainbow() end
+        if Config.VisualsPerformanceMode then applyPerf() end
+        startReassert()
+        applyCamFrame(false)
+    end
+    function Visuals.disable()
+        Config.Visuals = false; stopRainbow(); stopReassert()
+        clearGrade(); clearBloom(); clearCamFrame()
+        if Config.VisualsPerformanceMode then disablePerf() end
+        if _stretchBound then
+            pcall(function() RunService:UnbindFromRenderStep("VS_Stretch") end)
+            _stretchBound = false
+        end
+        restore()
+    end
+end)()
+
+Visuals.init()
+
+--------------------------------------------------------------------------------
+-- [3] LinoriaLib UI Layout Structure for Visuals Tab
+--------------------------------------------------------------------------------
+
+-- ESP Section
+local ESPGroup = Tabs.Visuals:AddLeftGroupbox('ESP Elements')
 ESPGroup:AddToggle('ESPBox', { Text = 'Box ESP', Default = false })
 ESPGroup:AddToggle('ESPName', { Text = 'Name ESP', Default = false })
 ESPGroup:AddToggle('ESPHealth', { Text = 'Health ESP', Default = false })
@@ -445,29 +1392,159 @@ ESPGroup:AddToggle('ESPTracer', { Text = 'Tracer ESP', Default = false })
 ESPGroup:AddToggle('ESPSkeleton', { Text = 'Skeleton ESP', Default = false })
 ESPGroup:AddToggle('ESPChams', { Text = 'Chams ESP', Default = false })
 
--- Indicators 전용 변수
+-- Indicators Section
 local _3323x151 = false -- Ragebot Indicator 활성화 여부
 local a41b78c88 = false -- Ammo Indicator 활성화 여부
 
 local IndicatorGroup = Tabs.Visuals:AddLeftGroupbox('Indicators')
-
 IndicatorGroup:AddToggle('IndicatorRagebot', {
     Text = 'Ragebot Indicator',
     Default = false,
-    Callback = function(Value)
-        _3323x151 = Value
-    end
+    Callback = function(Value) _3323x151 = Value end
 })
-
 IndicatorGroup:AddToggle('IndicatorAmmo', {
     Text = 'Ammo Indicator',
     Default = false,
+    Callback = function(Value) a41b78c88 = Value end
+})
+
+-- Visual Master & Environment Group
+local MasterGroup = Tabs.Visuals:AddRightGroupbox('Environment & Lighting')
+
+MasterGroup:AddToggle('VisualsMasterToggle', {
+    Text = 'Enable Custom Lighting',
+    Default = false,
     Callback = function(Value)
-        a41b78c88 = Value
+        if Value then Visuals.enable() else Visuals.disable() end
     end
 })
 
-local SkyboxGroup = Tabs.Visuals:AddRightGroupbox('Skybox')
+MasterGroup:AddDropdown('VisualsPresetDropdown', {
+    Values = Visuals.PresetOrder,
+    Default = 1,
+    Text = 'Lighting Preset',
+    Callback = function(Value) Visuals.setPreset(Value) end
+})
+
+MasterGroup:AddToggle('VisualsFullbrightToggle', {
+    Text = 'Fullbright',
+    Default = false,
+    Callback = function(Value) Visuals.toggleFullbright(Value) end
+})
+
+MasterGroup:AddToggle('VisualsNoFogToggle', {
+    Text = 'No Fog',
+    Default = false,
+    Callback = function(Value) Visuals.toggleNoFog(Value) end
+})
+
+MasterGroup:AddToggle('VisualsRainbowMapToggle', {
+    Text = 'Rainbow Map',
+    Default = false,
+    Callback = function(Value) Visuals.toggleRainbowMap(Value) end
+})
+
+MasterGroup:AddToggle('VisualsPerformanceToggle', {
+    Text = 'Performance Mode',
+    Default = false,
+    Callback = function(Value) Visuals.togglePerf(Value) end
+})
+
+-- Shading & Post Processing Group
+local PostGroup = Tabs.Visuals:AddRightGroupbox('Post-Processing FX')
+
+PostGroup:AddDropdown('VisualsGradeDropdown', {
+    Values = Visuals.GradeOrder,
+    Default = 2,
+    Text = 'Color Grade Filter',
+    Callback = function(Value) Visuals.setGrade(Value) end
+})
+
+PostGroup:AddSlider('VisualsGradeStrengthSlider', {
+    Text = 'Grade Strength',
+    Default = 0.6,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(Value) Visuals.setGradeStrength(Value) end
+})
+
+PostGroup:AddToggle('VisualsBloomToggle', {
+    Text = 'Custom Bloom Effect',
+    Default = false,
+    Callback = function(Value) Visuals.setBloom(Value) end
+})
+
+PostGroup:AddSlider('VisualsBloomIntensitySlider', {
+    Text = 'Bloom Intensity',
+    Default = 1.0,
+    Min = 0,
+    Max = 3,
+    Rounding = 2,
+    Callback = function(Value) Visuals.setBloomIntensity(Value) end
+})
+
+-- Camera & Stretch FX Group
+local CameraGroup = Tabs.Visuals:AddLeftGroupbox('Camera Effects')
+
+CameraGroup:AddSlider('VisualsStretchSlider', {
+    Text = 'Resolution Stretch',
+    Default = 1.0,
+    Min = 0.5,
+    Max = 1.2,
+    Rounding = 2,
+    Callback = function(Value)
+        Config.VisualsStretch = Value
+    end
+})
+
+CameraGroup:AddToggle('VisualsSwayToggle', {
+    Text = 'Motion Sway FX',
+    Default = false,
+    Callback = function(Value) Config.VisualsCameraSway = Value end
+})
+
+CameraGroup:AddToggle('CameraFovToggle', {
+    Text = 'FOV Override',
+    Default = false,
+    Callback = function(Value) Config.CameraFovOverride = Value end
+})
+
+CameraGroup:AddSlider('CameraFovSlider', {
+    Text = 'FOV Value',
+    Default = 90,
+    Min = 40,
+    Max = 130,
+    Rounding = 0,
+    Callback = function(Value) Config.CameraFovAmount = Value end
+})
+
+-- Name & Stat Spoofer Section
+local SpooferGroup = Tabs.Visuals:AddRightGroupbox('Profile Spoofer')
+
+SpooferGroup:AddToggle('SpooferNameToggle', {
+    Text = 'Spoof Display Name',
+    Default = false,
+    Callback = function(Value)
+        Config.SpooferNameEnabled = Value
+        Visuals.applyGuiNameSpoof()
+    end
+})
+
+SpooferGroup:AddInput('SpooferNameInput', {
+    Default = 'ProPlayer',
+    Numeric = false,
+    Finished = true,
+    Text = 'Fake Name',
+    Callback = function(Value)
+        Config.SpooferName = Value
+        Config.SpooferDisplayName = Value
+        Visuals.applyGuiNameSpoof()
+    end
+})
+
+-- Skybox Compatibility Section
+local SkyboxGroup = Tabs.Visuals:AddRightGroupbox('Legacy Skybox Presets')
 
 local function GetSky()
     local sky = Lighting:FindFirstChildOfClass("Sky")
@@ -478,7 +1555,7 @@ local function GetSky()
     return sky
 end
 
-local Presets = {
+local SkyPresets = {
     ["Purple Nebula"] = "rbxassetid://159454299",
     ["Night Sky"] = "rbxassetid://12064107",
     ["Pink Sunset"] = "rbxassetid://271042310",
@@ -500,337 +1577,12 @@ SkyboxGroup:AddDropdown('SkyboxPresetDropdown', {
     Default = 1,
     Text = 'Presets',
     Callback = function(Value)
-        if Value == 'Disable' then RemoveSky() elseif Presets[Value] then ApplySky(Presets[Value]) end
+        if Value == 'Disable' then RemoveSky() elseif SkyPresets[Value] then ApplySky(SkyPresets[Value]) end
     end
 })
 
 -- ==========================================
--- 통합된 Visuals 확장 기능 섹션
--- ==========================================
-do (function()
-    local LTB = Tabs.Visuals:AddLeftTabbox('World')
-    local WL = LTB:AddTab('Lighting')
-    local WX = LTB:AddTab('Weather')
-    WL:AddToggle('Visuals', { Text='Enable', Default=(Config.Visuals or false),
-        Callback=function(v) if v then Visuals.enable() else Visuals.disable() end end })
-        :AddKeyPicker('VisualsToggleKey', { Default='None', Mode='Toggle', SyncToggleState=true, Text='Visuals' })
-    local litDep = WL:AddDependencyBox()
-    litDep:AddDropdown('VisualsPreset', { Values=Visuals.PresetOrder or {'Neutral','Day','Night','Cyber','Sunset','Winter','Vaporwave'},
-        Default=(Config.VisualsPreset or 'Neutral'), Text='Preset',
-        Callback=function(v) Visuals.setPreset(v) end })
-    litDep:AddDropdown('VisualsGrade', { Values={'None','Crisp','Cold','Warm','Comp'},
-        Default=(Config.VisualsGrade or 'Crisp'), Text='Color grade',
-        Callback=function(v) if Visuals.setGrade then Visuals.setGrade(v) else Config.VisualsGrade = v end end })
-    litDep:AddSlider('VisualsGradeStrength', { Text='Grade strength', Default=(Config.VisualsGradeStrength or 0.6),
-        Min=0, Max=1, Rounding=2, Suffix='x',
-        Callback=function(v) if Visuals.setGradeStrength then Visuals.setGradeStrength(v) else Config.VisualsGradeStrength = v end end })
-    litDep:AddToggle('VisualsBloom', { Text='Bloom', Default=(Config.VisualsBloom or false),
-        Callback=function(v) Visuals.setBloom(v) end })
-    local blmDep = litDep:AddDependencyBox()
-    blmDep:AddSlider('VisualsBloomIntensity', { Text='Bloom intensity', Default=(Config.VisualsBloomIntensity or 1.0),
-        Min=0, Max=3, Rounding=2, Suffix='x',
-        Callback=function(v) if Visuals.setBloomIntensity then Visuals.setBloomIntensity(v) else Config.VisualsBloomIntensity = v end end })
-    blmDep:SetupDependencies({ { Toggles.VisualsBloom, true } })
-    litDep:AddDivider('World')
-    litDep:AddToggle('VisualsFullbright', { Text='Fullbright', Default=(Config.VisualsFullbright or false),
-        Callback=function(v) Visuals.toggleFullbright(v) end })
-    litDep:AddToggle('VisualsNoFog', { Text='No fog', Default=(Config.VisualsNoFog or false),
-        Callback=function(v) Visuals.toggleNoFog(v) end })
-    litDep:AddToggle('VisualsRainbowMap', { Text='Rainbow world', Default=(Config.VisualsRainbowMap or false),
-        Callback=function(v) if Visuals.toggleRainbow then Visuals.toggleRainbow(v) else Config.VisualsRainbowMap = v end end })
-    litDep:AddToggle('VisualsPerformanceMode', { Text='Performance mode', Default=(Config.VisualsPerformanceMode or false),
-        Callback=function(v) Visuals.togglePerf(v) end })
-    litDep:SetupDependencies({ { Toggles.Visuals, true } })
-    WX:AddToggle('Weather', { Text='Enable', Default=(Config.Weather or false),
-        Callback=function(v) if v then Weather.enableWeather() else Weather.disableWeather() end end })
-    local wxDep = WX:AddDependencyBox()
-    wxDep:AddDropdown('WeatherType', { Values={'Rain','Snow','Petals','Autumn','Mist','Ash','Sandstorm','Embers','Fireflies'},
-        Default=(Config.WeatherType or 'Rain'), Text='Precipitation',
-        Callback=function(v) Weather.setType(v) end })
-    wxDep:AddSlider('WeatherIntensity', { Text='Intensity', Default=(Config.WeatherIntensity or 1.0),
-        Min=0.15, Max=2, Rounding=2, Suffix='x',
-        Callback=function(v) Weather.setIntensity(v) end })
-    wxDep:AddSlider('WeatherSoundVolume', { Text='Volume', Default=(Config.WeatherSoundVolume or 0.35),
-        Min=0, Max=1, Rounding=2,
-        Callback=function(v) Weather.setVolume(v) end })
-    wxDep:AddToggle('WeatherMood', { Text='Mood tint', Default=(Config.WeatherMood or true),
-        Callback=function(v) Weather.toggleMood(v) end })
-    wxDep:AddDivider('Atmosphere')
-    wxDep:AddToggle('WeatherStorm', { Text='Storm & lightning', Default=(Config.WeatherStorm or false),
-        Callback=function(v) Weather.toggleStorm(v) end })
-    local stormDep = wxDep:AddDependencyBox()
-    stormDep:AddToggle('WeatherStormFlash', { Text='Sky flash', Default=(Config.WeatherStormFlash or true),
-        Callback=function(v) Weather.toggleSkyFlash(v) end })
-    stormDep:SetupDependencies({ { Toggles.WeatherStorm, true } })
-    wxDep:AddToggle('WeatherMeteors', { Text='Meteors', Default=(Config.WeatherMeteors or false),
-        Callback=function(v) Weather.toggleMeteors(v) end })
-    local metDep = wxDep:AddDependencyBox()
-    metDep:AddSlider('WeatherMeteorRate', { Text='Rate', Default=(Config.WeatherMeteorRate or 1.0),
-        Min=0.25, Max=3, Rounding=2, Suffix='x', Compact=true,
-        Callback=function(v) Weather.setMeteorsRate(v) end })
-    metDep:SetupDependencies({ { Toggles.WeatherMeteors, true } })
-    wxDep:AddToggle('WeatherShootingStars', { Text='Shooting stars', Default=(Config.WeatherShootingStars or false),
-        Callback=function(v) Weather.toggleShootingStars(v) end })
-    local starDep = wxDep:AddDependencyBox()
-    starDep:AddSlider('WeatherStarRate', { Text='Rate', Default=(Config.WeatherStarRate or 1.0),
-        Min=0.25, Max=3, Rounding=2, Suffix='x', Compact=true,
-        Callback=function(v) Weather.setStarsRate(v) end })
-    starDep:SetupDependencies({ { Toggles.WeatherShootingStars, true } })
-    wxDep:AddDropdown('SkyboxPreset', { Values=Weather.SkyboxOrder or {'Off','Space','Sunset','Clouds','Storm','Winter','Vaporwave'},
-        Default=(Config.SkyboxPreset or 'Off'), Text='Skybox',
-        Callback=function(v) Weather.setSkybox(v) end })
-    wxDep:AddToggle('SkyboxHideCelestial', { Text='Hide celestial', Default=(Config.SkyboxHideCelestial or false),
-        Callback=function(v) Weather.toggleCelestial(v) end })
-    wxDep:AddToggle('WeatherGodRays', { Text='God rays', Default=(Config.WeatherGodRays or false),
-        Callback=function(v) Weather.toggleGodRays(v) end })
-    wxDep:AddToggle('WeatherRainbow', { Text='Rainbow', Default=(Config.WeatherRainbow or false),
-        Callback=function(v) Weather.toggleRainbow(v) end })
-    wxDep:AddToggle('WeatherPuddles', { Text='Puddles', Default=(Config.WeatherPuddles or false),
-        Callback=function(v) Weather.togglePuddles(v) end })
-    wxDep:AddToggle('WeatherClockDial', { Text='Clock dial', Default=(Config.WeatherClockDial or false),
-        Callback=function(v) Weather.toggleClock(v) end })
-    wxDep:SetupDependencies({ { Toggles.Weather, true } })
-    local VM = Tabs.Visuals:AddLeftGroupbox('Viewmodel & Chams')
-    VM:AddToggle('VMOffsetEnabled', { Text='6-DOF transform', Default=(Config.VMOffsetEnabled or false),
-        Callback=function(v) Config.VMOffsetEnabled = v; pcall(Visuals.refreshViewModel) end })
-    local vmDep = VM:AddDependencyBox()
-    vmDep:AddDivider('Position')
-    vmDep:AddSlider('VMOffsetX', { Text='X', Default=(Config.VMOffsetX or 0), Min=-5, Max=5, Rounding=2, Compact=true,
-        Callback=function(v) Config.VMOffsetX = v end })
-    vmDep:AddSlider('VMOffsetY', { Text='Y', Default=(Config.VMOffsetY or 0), Min=-5, Max=5, Rounding=2, Compact=true,
-        Callback=function(v) Config.VMOffsetY = v end })
-    vmDep:AddSlider('VMOffsetZ', { Text='Z', Default=(Config.VMOffsetZ or 0), Min=-5, Max=5, Rounding=2, Compact=true,
-        Callback=function(v) Config.VMOffsetZ = v end })
-    vmDep:AddDivider('Rotation')
-    vmDep:AddSlider('VMOffsetPitch', { Text='Pitch', Default=(Config.VMOffsetPitch or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
-        Callback=function(v) Config.VMOffsetPitch = math.floor(v) end })
-    vmDep:AddSlider('VMOffsetYaw', { Text='Yaw', Default=(Config.VMOffsetYaw or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
-        Callback=function(v) Config.VMOffsetYaw = math.floor(v) end })
-    vmDep:AddSlider('VMOffsetRoll', { Text='Roll', Default=(Config.VMOffsetRoll or 0), Min=-180, Max=180, Rounding=0, Compact=true, Suffix='°',
-        Callback=function(v) Config.VMOffsetRoll = math.floor(v) end })
-    vmDep:SetupDependencies({ { Toggles.VMOffsetEnabled, true } })
-    VM:AddDivider('Chams & Textures')
-    VM:AddToggle('VMChamsEnabled', { Text='Material chams', Default=(Config.VMChamsEnabled or false),
-        Callback=function(v) Config.VMChamsEnabled = v; pcall(Visuals.refreshViewModel) end })
-        :AddColorPicker('VMChamsColor', { Default=(Config.VMChamsColor or Color3.fromRGB(53, 215, 199)), Title='Cham Color',
-            Callback=function(v) Config.VMChamsColor = v end })
-    local vmcDep = VM:AddDependencyBox()
-    vmcDep:AddDropdown('VMChamsMaterial', { Values={'ForceField','Neon','Glass','SmoothPlastic'},
-        Default=(Config.VMChamsMaterial or 'ForceField'), Text='Material', Callback=function(v) Config.VMChamsMaterial = v end })
-    vmcDep:AddSlider('VMChamsTransparency', { Text='Transparency', Default=(Config.VMChamsTransparency or 0.5),
-        Min=0, Max=1, Rounding=2, Callback=function(v) Config.VMChamsTransparency = v end })
-    vmcDep:SetupDependencies({ { Toggles.VMChamsEnabled, true } })
-    VM:AddToggle('VMDisableTextures', { Text='Disable gun textures', Default=(Config.VMDisableTextures or false),
-        Callback=function(v) Config.VMDisableTextures = v; pcall(Visuals.refreshViewModel) end })
-    local RTB1 = Tabs.Visuals:AddRightTabbox('Effects & Camera')
-    local HL = RTB1:AddTab('Holograms')
-    local CM = RTB1:AddTab('Camera')
-    HL:AddToggle('VisualsHolograms', { Text='On-hit holograms', Default=(Config.VisualsHolograms or false),
-        Callback=function(v) Config.VisualsHolograms = v end })
-        :AddColorPicker('VisualsHologramColor', { Default=(Config.VisualsHologramColor or Color3.fromRGB(0, 220, 255)), Title='Core Color',
-            Callback=function(v) Config.VisualsHologramColor = v end })
-        :AddColorPicker('VisualsHologramAccent', { Default=(Config.VisualsHologramAccent or Color3.fromRGB(255, 60, 200)), Title='Halo Accent',
-            Callback=function(v) Config.VisualsHologramAccent = v end })
-    local holoDep = HL:AddDependencyBox()
-    holoDep:AddDropdown('VisualsHologramStyle', { Values={'Orb','Skeleton','Wraith'}, Default=(Config.VisualsHologramStyle or 'Orb'),
-        Text='Style', Callback=function(v) Config.VisualsHologramStyle = v end })
-    holoDep:AddSlider('VisualsHologramDuration', { Text='Duration', Default=(Config.VisualsHologramDuration or 3.5),
-        Min=0.5, Max=5, Rounding=1, Suffix='s', Callback=function(v) Config.VisualsHologramDuration = v end })
-    holoDep:AddSlider('VisualsHologramRange', { Text='Max range', Default=(Config.VisualsHologramRange or 300),
-        Min=20, Max=300, Rounding=0, Suffix=' studs', Callback=function(v) Config.VisualsHologramRange = math.floor(v) end })
-    holoDep:AddSlider('VisualsHologramVisibility', { Text='Visibility', Default=(Config.VisualsHologramVisibility or 1.4),
-        Min=0.2, Max=2, Rounding=1, Suffix='x', Callback=function(v) Config.VisualsHologramVisibility = v end })
-    holoDep:AddToggle('VisualsHologramLethal', { Text='Gold kill aura', Default=(Config.VisualsHologramLethal or true),
-        Callback=function(v) Config.VisualsHologramLethal = v end })
-    holoDep:SetupDependencies({ { Toggles.VisualsHolograms, true } })
-    CM:AddToggle('CameraFovOverride', { Text='FOV override', Default=(Config.CameraFovOverride or false),
-        Callback=function(v) Config.CameraFovOverride = v end })
-    local fovDep = CM:AddDependencyBox()
-    fovDep:AddSlider('CameraFovAmount', { Text='Field of view', Default=(Config.CameraFovAmount or 90),
-        Min=40, Max=130, Rounding=0, Suffix='°', Callback=function(v) Config.CameraFovAmount = math.floor(v) end })
-    fovDep:SetupDependencies({ { Toggles.CameraFovOverride, true } })
-    CM:AddToggle('CameraAspectRatioEnabled', { Text='Aspect ratio stretch', Default=(Config.CameraAspectRatioEnabled or false),
-        Callback=function(v) Config.CameraAspectRatioEnabled = v end })
-    local arDep = CM:AddDependencyBox()
-    arDep:AddSlider('CameraAspectRatioX', { Text='Width', Default=(Config.CameraAspectRatioX or 4),
-        Min=1, Max=21, Rounding=0, Compact=true, Callback=function(v) Config.CameraAspectRatioX = math.floor(v) end })
-    arDep:AddSlider('CameraAspectRatioY', { Text='Height', Default=(Config.CameraAspectRatioY or 3),
-        Min=1, Max=21, Rounding=0, Compact=true, Callback=function(v) Config.CameraAspectRatioY = math.floor(v) end })
-    arDep:SetupDependencies({ { Toggles.CameraAspectRatioEnabled, true } })
-    CM:AddToggle('ThirdPersonEnabled', { Text='Third person', Default=(Config.ThirdPersonEnabled or false),
-        Callback=function(v) Config.ThirdPersonEnabled = v end })
-    local tpDep = CM:AddDependencyBox()
-    tpDep:AddSlider('ThirdPersonDistance', { Text='Distance', Default=(Config.ThirdPersonDistance or 12),
-        Min=4, Max=30, Rounding=0, Suffix=' studs', Callback=function(v) Config.ThirdPersonDistance = math.floor(v) end })
-    tpDep:SetupDependencies({ { Toggles.ThirdPersonEnabled, true } })
-    local RTB2 = Tabs.Visuals:AddRightTabbox('Game & Profile')
-    local GL = RTB2:AddTab('Cosmetics')
-    local SP = RTB2:AddTab('Spoofer')
-    GL:AddToggle('GameVisuals', { Text='Enable', Default=(Config.GameVisuals or false),
-        Callback=function(v) if v then GameVisuals.enable() else GameVisuals.disable() end end })
-    local gvDep = GL:AddDependencyBox()
-    gvDep:AddToggle('GVUnlockAll', { Text='Unlock all', Default=(Config.GVUnlockAll or true),
-        Callback=function(v) pcall(GameVisuals.setUnlockAll, v) end })
-    gvDep:AddToggle('GVRemember', { Text='Remember picks', Default=(Config.GVRemember or true),
-        Callback=function(v) Config.GVRemember = v ; if v then pcall(GameVisuals.saveConfig) end end })
-    gvDep:AddToggle('GVEmotes', { Text='Unlock emotes', Default=(Config.GVEmotes or false),
-        Callback=function(v) pcall(GameVisuals.syncEmotes, v) end })
-    gvDep:AddDropdown('GVEmote', { Values = { 'None' }, Default = 'None', Text = 'Play emote',
-        Callback = function(v) pcall(GameVisuals.playEmote, v) end })
-    gvDep:AddButton({ Text='Reset all', Func=function() pcall(GameVisuals.restore) end })
-    gvDep:AddDivider('Ranked charm')
-    gvDep:AddToggle('GVRankCharmOn', { Text='Spoof ranked charm rank', Default=(Config.GVRankCharmOn or false),
-        Callback=function(v) Config.GVRankCharmOn = v ; if v then pcall(GameVisuals.refreshRankCharmMeta) end end })
-    gvDep:SetupDependencies({ { Toggles.GameVisuals, true } })
-    local rcDep = GL:AddDependencyBox()
-    rcDep:AddDropdown('GVRankWep', { Values = { 'Held weapon' }, Default = 'Held weapon',
-        Text = 'Ranked charm on', Callback = function(v) end })
-    rcDep:AddDropdown('GVRankLook', { Values = {}, Default = 'None',
-        Text = 'make it look like',
-        Callback = function(v)
-            if v == nil or v == 'None' then return end
-            local wv = 'Held weapon'
-            pcall(function() wv = Options.GVRankWep.Value or wv end)
-            pcall(GameVisuals.applyRankedCharm, v, wv)
-        end })
-    rcDep:AddInput('GVRankCharmLb', { Default = tostring(Config.GVRankCharmLb or 0), Numeric = true,
-        Text = '#N (optional, auto for Archnemesis)', Placeholder = '0', Finished = false,
-        Callback = function(v) Config.GVRankCharmLb = tonumber(v) or 0 ; pcall(GameVisuals.refreshRankCharmMeta) end })
-    rcDep:SetupDependencies({ { Toggles.GVRankCharmOn, true }, { Toggles.GameVisuals, true } })
-    GL:AddDivider('Manual picker')
-    local pickDep = GL:AddDependencyBox()
-    pickDep:AddDropdown('GVWeapon', { Values = { 'None' }, Default = 'None', Text = 'Weapon',
-        Callback = function(v) pcall(GameVisuals.setWeapon, v) end })
-    pickDep:AddDropdown('GVSkin', { Values = { 'None' }, Default = 'None', Text = 'Skin',
-        Callback = function(v) pcall(GameVisuals.setSkin, v) end })
-    pickDep:AddDropdown('GVCharm', { Values = { 'None' }, Default = 'None', Text = 'Charm',
-        Callback = function(v) pcall(GameVisuals.setCharm, v) end })
-    pickDep:AddDropdown('GVWrap', { Values = { 'None' }, Default = 'None', Text = 'Wrap',
-        Callback = function(v) pcall(GameVisuals.setWrap, v) end })
-    pickDep:AddDropdown('GVFinisher', { Values = { 'None' }, Default = 'None', Text = 'Finisher',
-        Callback = function(v) pcall(GameVisuals.setFinisher, v) end })
-    pickDep:AddToggle('GVWrapInverted', { Text='Invert wrap', Default=(Config.GVWrapInverted or false),
-        Callback=function(v) pcall(GameVisuals.setWrapInverted, v) end })
-    pickDep:SetupDependencies({ { Toggles.GameVisuals, true } })
-    task.spawn(function()
-        local sig = nil
-        while true do
-            task.wait(3)
-            local ok, lists = pcall(function()
-                return { GameVisuals.weaponList(), GameVisuals.skinList(), GameVisuals.charmList(),
-                         GameVisuals.wrapList(), GameVisuals.finisherList(), GameVisuals.rankNames(),
-                         GameVisuals.emoteList(), GameVisuals.rankedCharmsFor() }
-            end)
-            if ok and type(lists) == 'table' then
-                local lens = {}
-                for i = 1, 8 do lens[i] = lists[i] and #lists[i] or 0 end
-                local now = table.concat(lens, '/')
-                if now ~= sig then
-                    sig = now
-                    pcall(function() Options.GVWeapon:SetValues(lists[1]) end)
-                    pcall(function() Options.GVSkin:SetValues(lists[2]) end)
-                    pcall(function() Options.GVCharm:SetValues(lists[3]) end)
-                    pcall(function() Options.GVWrap:SetValues(lists[4]) end)
-                    pcall(function() Options.GVFinisher:SetValues(lists[5]) end)
-                    pcall(function() Options.GVRankLook:SetValues(lists[6]) end)
-                    pcall(function() Options.GVEmote:SetValues(lists[7]) end)
-                    pcall(function() Options.GVRankWep:SetValues(lists[8]) end)
-                end
-            end
-        end
-    end)
-    GL:AddDivider('Live Loaded')
-    local LOADED_LINES = 6
-    local loaded = {}
-    for i = 1, LOADED_LINES do loaded[i] = GL:AddLabel(' ', true) end
-    if type(loaded[1]) == 'table' and type(loaded[1].SetText) == 'function' then
-        task.spawn(function()
-            local shown = nil
-            while GameVisuals.uiAlive do
-                task.wait(0.35)
-                local lines = GameVisuals.summary()
-                if #lines == 0 then
-                    if Config.GameVisuals == true and GameVisuals.ready() ~= true then
-                        lines = { 'not active yet' }
-                    else
-                        lines = {}
-                    end
-                end
-                local joined = table.concat(lines, '\n')
-                if joined ~= shown then
-                    shown = joined
-                    for i = 1, LOADED_LINES do
-                        pcall(function() loaded[i]:SetText(lines[i] or ' ') end)
-                    end
-                end
-            end
-        end)
-    end
-    SP:AddDivider('Identity')
-    SP:AddToggle('SpooferNameEnabled', { Text='Spoof name', Default=(Config.SpooferNameEnabled or false),
-        Callback=function(v) Config.SpooferNameEnabled = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
-    local spNDep = SP:AddDependencyBox()
-    spNDep:AddInput('SpooferName', { Default=(Config.SpooferName or 'ProPlayer'), Text='Username',
-        Placeholder='Username', Finished=false,
-        Callback=function(v) Config.SpooferName = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
-    spNDep:AddInput('SpooferDisplayName', { Default=(Config.SpooferDisplayName or 'ProPlayer'), Text='Display name',
-        Placeholder='Display name', Finished=false,
-        Callback=function(v) Config.SpooferDisplayName = v ; if Visuals.applyGuiNameSpoof then Visuals.applyGuiNameSpoof() end end })
-    spNDep:SetupDependencies({ { Toggles.SpooferNameEnabled, true } })
-    SP:AddDivider('Ranked & Stats')
-    SP:AddToggle('SpooferLevelEnabled', { Text='Spoof level', Default=(Config.SpooferLevelEnabled or false),
-        Callback=function(v) Config.SpooferLevelEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spLDep = SP:AddDependencyBox()
-    spLDep:AddInput('SpooferLevel', { Default=tostring(Config.SpooferLevel or 100), Text='Level',
-        Placeholder='100', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferLevel = tonumber(v) or 100 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spLDep:SetupDependencies({ { Toggles.SpooferLevelEnabled, true } })
-    SP:AddToggle('SpooferRankedEloEnabled', { Text='Spoof ELO', Default=(Config.SpooferRankedEloEnabled or false),
-        Callback=function(v) Config.SpooferRankedEloEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spEDep = SP:AddDependencyBox()
-    spEDep:AddInput('SpooferRankedElo', { Default=tostring(Config.SpooferRankedElo or 2400), Text='ELO rating',
-        Placeholder='2400', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferRankedElo = tonumber(v) or 2400 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spEDep:SetupDependencies({ { Toggles.SpooferRankedEloEnabled, true } })
-    SP:AddToggle('SpooferCasualWinsEnabled', { Text='Spoof casual wins', Default=(Config.SpooferCasualWinsEnabled or false),
-        Callback=function(v) Config.SpooferCasualWinsEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spWDep = SP:AddDependencyBox()
-    spWDep:AddInput('SpooferCasualWins', { Default=tostring(Config.SpooferCasualWins or 500), Text='Casual wins',
-        Placeholder='500', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferCasualWins = tonumber(v) or 500 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spWDep:SetupDependencies({ { Toggles.SpooferCasualWinsEnabled, true } })
-    SP:AddToggle('SpooferRankedWinsEnabled', { Text='Spoof ranked wins', Default=(Config.SpooferRankedWinsEnabled or false),
-        Callback=function(v) Config.SpooferRankedWinsEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spRWDep = SP:AddDependencyBox()
-    spRWDep:AddInput('SpooferRankedWins', { Default=tostring(Config.SpooferRankedWins or 250), Text='Ranked wins',
-        Placeholder='250', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferRankedWins = tonumber(v) or 250 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spRWDep:SetupDependencies({ { Toggles.SpooferRankedWinsEnabled, true } })
-    SP:AddToggle('SpooferWinPercentEnabled', { Text='Spoof winrate', Default=(Config.SpooferWinPercentEnabled or false),
-        Callback=function(v) Config.SpooferWinPercentEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spPDep = SP:AddDependencyBox()
-    spPDep:AddInput('SpooferWinPercent', { Default=tostring(Config.SpooferWinPercent or 75), Text='Winrate %',
-        Placeholder='75', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferWinPercent = tonumber(v) or 75 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spPDep:SetupDependencies({ { Toggles.SpooferWinPercentEnabled, true } })
-    SP:AddToggle('SpooferWinStreakEnabled', { Text='Spoof win streak', Default=(Config.SpooferWinStreakEnabled or false),
-        Callback=function(v) Config.SpooferWinStreakEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spSDep = SP:AddDependencyBox()
-    spSDep:AddInput('SpooferWinStreak', { Default=tostring(Config.SpooferWinStreak or 25), Text='Win streak',
-        Placeholder='25', Finished=false, Numeric=true,
-        Callback=function(v) Config.SpooferWinStreak = tonumber(v) or 25 ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spSDep:SetupDependencies({ { Toggles.SpooferWinStreakEnabled, true } })
-    SP:AddToggle('SpooferFavoriteMapEnabled', { Text='Spoof favorite map', Default=(Config.SpooferFavoriteMapEnabled or false),
-        Callback=function(v) Config.SpooferFavoriteMapEnabled = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    local spMDep = SP:AddDependencyBox()
-    spMDep:AddInput('SpooferFavoriteMap', { Default=tostring(Config.SpooferFavoriteMap or 'Arena'), Text='Map name',
-        Placeholder='Arena', Finished=false,
-        Callback=function(v) Config.SpooferFavoriteMap = v ; if Visuals.updatePlayerSpoofer then Visuals.updatePlayerSpoofer() end end })
-    spMDep:SetupDependencies({ { Toggles.SpooferFavoriteMapEnabled, true } })
-end)() end
-
--- ==========================================
--- Screen GUI Indicators 생성 (화면 중앙 표시)
+-- Screen GUI Indicators (화면 중앙 표시)
 -- ==========================================
 local _9376x428 = Instance.new("ScreenGui")
 _9376x428.Name = "HalmuIndicators"
@@ -840,7 +1592,7 @@ _9376x428.DisplayOrder = 999
 _9376x428.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 pcall(function()
-    _9376x428.Parent = game:GetService("CoreGui")
+    _9376x428.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 end)
 if not _9376x428.Parent then
     _9376x428.Parent = LocalPlayer:WaitForChild("PlayerGui")
@@ -912,7 +1664,6 @@ local function get_local_ammo_status()
     return v43335, _0xfd96, L505_10
 end
 
--- RenderStepped 루프 내 Indicator Text 갱신
 RunService.RenderStepped:Connect(function()
     if _3323x151 and L555_61 then
         local _00IO01 = "idk"
@@ -1272,7 +2023,7 @@ SkinBox:AddButton('Unlock All', function()
 end)
 
 -- ==========================================
--- ESP Render Loop (Chams 최적화 적용)
+-- ESP Render Loop
 -- ==========================================
 local espData = {}
 
@@ -1339,8 +2090,8 @@ local function UpdateChams(c, enable)
 end
 
 RunService.RenderStepped:Connect(function()
-    local Camera = Workspace.CurrentCamera
-    if not Camera then return end
+    local CurrentCam = Workspace.CurrentCamera
+    if not CurrentCam then return end
 
     local isChamsActive = IsToggleActive("ESPChams")
 
@@ -1354,12 +2105,12 @@ RunService.RenderStepped:Connect(function()
             head = c:FindFirstChild("Head") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso")
             
             if root and head then
-                local rPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                local rPos, onScreen = CurrentCam:WorldToViewportPoint(root.Position)
                 if onScreen then
                     isAlive = true
                     rootPos = rPos
-                    local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-                    local legPos = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+                    local headPos = CurrentCam:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                    local legPos = CurrentCam:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
                     height = math.abs(headPos.Y - legPos.Y)
                     width = height * 0.6 
                     boxSize = Vector2.new(width, height)
@@ -1386,15 +2137,15 @@ RunService.RenderStepped:Connect(function()
             end
             
             if IsToggleActive("ESPName") then d.NameText.Text = p.Name; d.NameText.Position = Vector2.new(boxPos.X + width/2, top.Y - 15); d.NameText.Visible = true else d.NameText.Visible = false end
-            if IsToggleActive("ESPDistance") then local dist = math.floor((Camera.CFrame.Position - root.Position).Magnitude); d.DistText.Text = tostring(dist) .. "m"; d.DistText.Position = Vector2.new(boxPos.X + width/2, bottom.Y + 2); d.DistText.Visible = true else d.DistText.Visible = false end
-            if IsToggleActive("ESPTracer") then d.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y); d.Tracer.To = Vector2.new(rootPos.X, bottom.Y); d.Tracer.Visible = true else d.Tracer.Visible = false end
+            if IsToggleActive("ESPDistance") then local dist = math.floor((CurrentCam.CFrame.Position - root.Position).Magnitude); d.DistText.Text = tostring(dist) .. "m"; d.DistText.Position = Vector2.new(boxPos.X + width/2, bottom.Y + 2); d.DistText.Visible = true else d.DistText.Visible = false end
+            if IsToggleActive("ESPTracer") then d.Tracer.From = Vector2.new(CurrentCam.ViewportSize.X / 2, CurrentCam.ViewportSize.Y); d.Tracer.To = Vector2.new(rootPos.X, bottom.Y); d.Tracer.Visible = true else d.Tracer.Visible = false end
             
             if IsToggleActive("ESPSkeleton") then
                 for _, s in pairs(d.Skeleton) do
                     local p1, p2 = c:FindFirstChild(s[1]), c:FindFirstChild(s[2])
                     if p1 and p2 then
-                        local v1, o1 = Camera:WorldToViewportPoint(p1.Position)
-                        local v2, o2 = Camera:WorldToViewportPoint(p2.Position)
+                        local v1, o1 = CurrentCam:WorldToViewportPoint(p1.Position)
+                        local v2, o2 = CurrentCam:WorldToViewportPoint(p2.Position)
                         if o1 and o2 then s[3].From = Vector2.new(v1.X, v1.Y); s[3].To = Vector2.new(v2.X, v2.Y); s[3].Visible = true; s[3].Color = Color3.new(1, 1, 1) else s[3].Visible = false end
                     else s[3].Visible = false end
                 end
@@ -1419,6 +2170,7 @@ end)
 local SettingsMenu = Tabs.Setting:AddLeftGroupbox('Menu Settings')
 
 SettingsMenu:AddButton('Unload UI', function()
+    pcall(function() Visuals.unload() end)
     Library:Unload()
 end)
 
