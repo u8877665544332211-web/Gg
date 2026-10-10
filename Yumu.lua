@@ -2196,6 +2196,7 @@ local SoundLibrary = {
     ["Mambo"]                       = "rbxassetid://119974879573475",
     ["no sound"]                    = "rbxassetid://139836625302855",
     ["TF2 Headshot"]                = "rbxassetid://8255306220",
+    ["windows 11 error"]            = "rbxassetid://8499261098",
 }
 
 local SoundKeys = {}
