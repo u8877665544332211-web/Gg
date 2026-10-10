@@ -2194,7 +2194,7 @@ local SoundLibrary = {
     ["rust hs"]                     = "rbxassetid://4764109000",
     ["windows 10 error"]            = "rbxassetid://5914602124",
     ["Mambo"]                       = "rbxassetid://119974879573475",
-    ["Chicken on tree screaming"]   = "rbxassetid://139836625302855",
+    ["no sound"]                    = "rbxassetid://139836625302855",
 }
 
 local SoundKeys = {}
